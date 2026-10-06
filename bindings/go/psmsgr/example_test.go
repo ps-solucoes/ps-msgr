@@ -70,3 +70,59 @@ func Example() {
 	fmt.Printf("seq=%d speed=%.1f rpm\n", got.Sequence, got.SpeedRpm)
 	// Output: seq=1 speed=1500.0 rpm
 }
+
+// One goroutine follows a channel and takes commands, with a select.
+func ExampleReader_WaitChan() {
+	dir, err := os.MkdirTemp("", "psmsgr-example-")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	w, err := psmsgr.OpenWriter("motor", 24, &psmsgr.WriterOptions{PayloadType: MotorStatusV1, Dir: dir})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer w.Close()
+	r, err := psmsgr.OpenReader("motor", dir)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer r.Close()
+
+	quit := make(chan struct{})
+	go func() {
+		for seq := uint64(1); seq <= 3; seq++ {
+			status := MotorStatus{Sequence: seq, SpeedRpm: 1500}
+			psmsgr.PublishValue(w, &status)
+			time.Sleep(10 * time.Millisecond)
+		}
+		close(quit)
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var seen uint32
+	var last MotorStatus
+	for {
+		ch := r.WaitChan(ctx, seen, psmsgr.NoTimeout)
+		select {
+		case res := <-ch:
+			if res.Err != nil {
+				log.Fatal(res.Err)
+			}
+			seen = res.Generation
+			if _, _, err := psmsgr.ReadValue(r, &last); err != nil {
+				log.Fatal(err)
+			}
+		case <-quit:
+			cancel()
+			<-ch // the reader is ours again
+			if _, _, err := psmsgr.ReadValue(r, &last); err != nil {
+				log.Fatal(err)
+			}
+			fmt.Printf("last seq=%d\n", last.Sequence)
+			return
+		}
+	}
+	// Output: last seq=3
+}

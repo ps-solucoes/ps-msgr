@@ -64,11 +64,11 @@ const (
 )
 
 // Reader reads a channel. It is not safe for concurrent use, except that
-// another goroutine may Close it during Wait or WriterAlive.
+// another goroutine may Close it during Wait, WriterAlive or a WaitChan.
 type Reader struct {
-	// nil once closed. Only Wait and WriterAlive may run concurrently with
-	// Close; they take the handle under mu, and the last of them to return
-	// after a Close closes it.
+	// nil once closed. Only Wait, WriterAlive and WaitChan may run
+	// concurrently with Close; they take the handle under mu, and the last
+	// of them to return after a Close closes it.
 	h       *C.psmsgr_state_reader
 	name    string
 	pending bool // an attach consumed by a result that failed: reported by the next
@@ -76,7 +76,11 @@ type Reader struct {
 
 	mu     sync.Mutex
 	closed bool
-	active int // Wait and WriterAlive calls in progress
+	active int // Wait, WriterAlive and WaitChan calls in progress
+	// A WaitChan owns the reader until it delivers its result. waiter is
+	// its registration in a waitset; nil for a thread per reader.
+	async  bool
+	waiter *asyncWait
 }
 
 // OpenReader opens a reader of the channel name in dir ("": $PSMSGR_DIR,
@@ -170,17 +174,29 @@ func (r *Reader) Peek() (_ Info, ok bool, _ error) {
 // rounded up to whole milliseconds, and [NoTimeout] (any negative value)
 // waits indefinitely. It returns ctx.Err() once ctx ends, and ErrClosed
 // once another goroutine closes the reader; it checks both at least every
-// 100 ms. It fails with ErrNotSup on a channel created with NoNotify.
+// 100 ms. It fails with ErrNotSup on a channel created with NoNotify, and
+// with ErrState while a [Reader.WaitChan] owns the reader.
 func (r *Reader) Wait(ctx context.Context, lastGeneration uint32, timeout time.Duration) (bool, error) {
-	h, err := r.acquire()
+	h, err := r.acquire("wait", false)
 	if err != nil {
 		return false, err
 	}
 	defer r.release(h)
+	return r.wait(ctx, h, lastGeneration, roundTimeout(timeout))
+}
+
+// roundTimeout rounds a positive timeout up to whole milliseconds, so that
+// it never becomes a poll.
+func roundTimeout(timeout time.Duration) time.Duration {
 	if timeout > 0 && timeout <= math.MaxInt64-time.Millisecond {
-		// Whole milliseconds, so that a positive timeout never becomes a poll.
 		timeout = (timeout + time.Millisecond - 1).Truncate(time.Millisecond)
 	}
+	return timeout
+}
+
+// wait is Wait on h, which the caller has acquired, with a rounded timeout.
+func (r *Reader) wait(ctx context.Context, h *C.psmsgr_state_reader, lastGeneration uint32,
+	timeout time.Duration) (bool, error) {
 	start := time.Now()
 	deadline, hasDeadline := ctx.Deadline()
 	for {
@@ -226,7 +242,7 @@ func (r *Reader) Wait(ctx context.Context, lastGeneration uint32, timeout time.D
 // WriterAlive reports whether a writer holds the channel now. It makes
 // syscalls, and reattaches if the channel file was replaced.
 func (r *Reader) WriterAlive() (bool, error) {
-	h, err := r.acquire()
+	h, err := r.acquire("writer alive", false)
 	if err != nil {
 		return false, err
 	}
@@ -264,11 +280,13 @@ func (r *Reader) Describe() (_ ChannelDesc, ok bool, _ error) {
 
 // Close closes the reader. It is idempotent and returns nil. Another
 // goroutine may call it during Wait or WriterAlive: Close returns at once,
-// and the native handle closes when that call returns.
+// and the native handle closes when that call returns. During a WaitChan,
+// Close first takes the reader out of the waitset, which can block for as
+// long as the waitset scans its readers, and the wait delivers ErrClosed.
 func (r *Reader) Close() error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if r.closed {
+		r.mu.Unlock()
 		return nil
 	}
 	r.closed = true
@@ -277,17 +295,27 @@ func (r *Reader) Close() error {
 		C.psmsgr_state_reader_close(r.h)
 	}
 	r.h = nil
+	w := r.waiter
+	r.mu.Unlock()
+	if w != nil {
+		w.cancel(WaitResult{Err: ErrClosed})
+	}
 	return nil
 }
 
 // acquire takes the handle for a call that may run concurrently with Close.
-func (r *Reader) acquire() (*C.psmsgr_state_reader, error) {
+// A WaitChan (async) owns it until releaseAsync; other calls fail meanwhile.
+func (r *Reader) acquire(op string, async bool) (*C.psmsgr_state_reader, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
 		return nil, ErrClosed
 	}
+	if r.async {
+		return nil, &Error{Op: op, Channel: r.name, Code: ErrState, Msg: "a WaitChan is in progress"}
+	}
 	r.active++
+	r.async = async
 	return r.h, nil
 }
 
@@ -295,6 +323,19 @@ func (r *Reader) acquire() (*C.psmsgr_state_reader, error) {
 func (r *Reader) release(h *C.psmsgr_state_reader) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.releaseLocked(h)
+}
+
+// releaseAsync ends a WaitChan: the reader is the caller's again.
+func (r *Reader) releaseAsync(h *C.psmsgr_state_reader) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.async = false
+	r.waiter = nil
+	r.releaseLocked(h)
+}
+
+func (r *Reader) releaseLocked(h *C.psmsgr_state_reader) {
 	r.active--
 	if r.closed && r.active == 0 {
 		C.psmsgr_state_reader_close(h)

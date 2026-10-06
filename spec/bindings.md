@@ -53,7 +53,8 @@ The rules that apply to all of them (Go differs where its section says so):
   runtime dependencies. `ctypes`, so it is a pure-Python wheel, built with
   setuptools.
 - Every C function is declared with explicit `argtypes` and `restype`, and
-  the three structs are mirrored as `ctypes.Structure`. Options are set up
+  the four structs (with `psmsgr_waitset_event`) are mirrored as
+  `ctypes.Structure`. Options are set up
   with `psmsgr_state_options_init_sized(opt, sizeof(opt))`, and `describe`
   calls `psmsgr_state_describe_sized(r, desc, sizeof(desc))`. The binding's
   tests compare every size, offset and constant with a helper compiled from
@@ -61,10 +62,12 @@ The rules that apply to all of them (Go differs where its section says so):
 - Loading: `ctypes` opens `$PSMSGR_LIBRARY` if set, else `libpsmsgr.so.1`.
   A missing library, a missing symbol or an incompatible version raises
   `ImportError` at import, naming the library and what is wrong.
-- The GIL: `wait` and the calls that do file system work (opening a
+- The GIL: `wait`, the waitset's `wait`, `add` and `remove` (which wait
+  for a scan) and the calls that do file system work (opening a
   writer or a reader, `writer_alive`, `unlink`) release it, so a blocking
   `wait` doesn't stall other threads. `publish`, `read`, `peek`,
-  `describe`, `now_ns` and `close` keep it (`ctypes.PyDLL`): releasing and
+  `describe`, `now_ns`, `close` and the waitset's `open`, `close` and
+  `wake` keep it (`ctypes.PyDLL`): releasing and
   reacquiring the GIL would cost more than these calls, and with other busy
   threads reacquiring can take a whole switch interval.
 - When `wait` gets `PSMSGR_E_INTR`, the binding returns to the interpreter
@@ -95,6 +98,50 @@ The rules that apply to all of them (Go differs where its section says so):
   when it returns, and `wait` raises `ValueError` before its next slice.
   This is the way to stop a thread blocked in `wait(timeout=None)`. A
   per-reader lock and a count of those calls in progress implement it.
+- `wait_async` is `wait` for `asyncio` (it needs library 1.1), without a
+  blocked thread per reader. It registers the reader in a waitset
+  (c-api.md): one thread per set of up to 127 readers waits in
+  `psmsgr_waitset_wait` and completes each wait on its own event loop with
+  `call_soon_threadsafe`, so any number of loops, in any threads, share
+  the sets.
+  - A set and its thread are created on first use, and when every set is
+    full, and stay for the life of the process. The threads are daemon
+    threads: they never keep the process alive. A child of `fork` starts
+    over with new sets; closing a reader there that was waiting at the
+    fork leaves the parent's set behind. A set whose `wait` fails takes
+    no new waits, and an error in one delivery doesn't stop its thread.
+  - Where `psmsgr_waitset_open` returns `NOTSUP` (Linux < 5.16,
+    qemu-user), the binding remembers it and runs each `wait_async` as
+    `wait` on a daemon thread of its own.
+  - Arguments, result and exceptions are `wait`'s: an event's status other
+    than `OK` raises what `wait` raises for that code. `None` (or
+    `math.inf`) waits indefinitely and `0` polls once, synchronously. A
+    positive timeout is a timer on the loop (`call_later`), not rounded to
+    milliseconds; asyncio may run it up to the clock's resolution early.
+    At the timer, once the reader is out of the set, the binding checks
+    the generation once more (`psmsgr_state_wait` with 0 ms), as `wait`
+    does at its deadline: a timeout too short for the set's thread to scan
+    still returns `True` for a changed generation, or raises. An event
+    that came first is the result instead. In the fallback the timeout is
+    `wait`'s.
+  - Cancelling the task, also through `asyncio.timeout` or the end of
+    `asyncio.run`, removes the reader from its set; an event that raced
+    the cancellation is dropped. In the fallback, the `CancelledError`
+    comes once the thread has left `wait`, within 100 ms.
+  - Until the wait ends the set owns the reader: every other call raises
+    `RuntimeError`, except `close()`, from any thread. It removes the
+    reader from the set, closes it, and the wait raises `ValueError`
+    (unless the event came first: then it is the result). In the fallback
+    it behaves as during `wait`.
+  - `psmsgr_waitset_add` and `psmsgr_waitset_remove` both block while the
+    set's thread scans (attaching channels), so starting, cancelling or
+    timing out a `wait_async`, or closing its reader, can block the loop
+    for that long. `wait_async` adds under the reader's lock: a `close()`
+    from another thread waits for the add.
+  - A set's thread is started before the set is listed: if it cannot
+    start, the set is closed and `wait_async` raises.
+  - A wait whose loop was closed drops its result. The reader is free
+    once the event comes, or the coroutine is closed.
 
 ```python
 from ps_msgr import StateWriter, StateReader, Snapshot, StateInfo, now_ns, unlink
@@ -118,6 +165,8 @@ class StateReader:                        # context manager
     def peek(self) -> StateInfo | None: ...                   # no copy, no syscall
     def wait(self, last_generation: int = 0,
              timeout: float | None = None) -> bool: ...       # False on timeout
+    async def wait_async(self, last_generation: int = 0,
+                         timeout: float | None = None) -> bool: ...  # asyncio
     def writer_alive(self) -> bool: ...
     def describe(self) -> ChannelDesc | None: ...
     @property
@@ -412,10 +461,13 @@ No dependencies beyond the standard library. Released with tags
   - The dynamic linker checks the major (SONAME) and the symbol versions.
     The first `OpenWriter`, `OpenReader` or `Unlink` also checks
     `psmsgr_version()` and returns an `*Error` with code `ErrNotSup` if the
-    major differs or the minor is older than the binding needs.
+    major differs or the minor is older than the binding needs (1.1, for
+    the waitset). The waitset's symbols are versioned `PSMSGR_1.1`, so in
+    practice the dynamic linker already refuses a 1.0 library.
 - The structs and constants are the header's own (`C.psmsgr_state_info`,
-  …), so there are no mirrors to compare with `interop_helper layout`. The
-  exported `Code` constants are written out for the documentation, and
+  …), so there are no mirrors to compare with `interop_helper layout`.
+  Still, a test compares `psmsgr_waitset_event` and `PSMSGR_WAITSET_MAX`
+  as cgo sees them with it. The exported `Code` constants are written out for the documentation, and
   checked against the header at compile time: a difference fails the build.
   Options are set up with `psmsgr_state_options_init_sized(&opt,
   sizeof(opt))`, and `Describe` calls `psmsgr_state_describe_sized(r,
@@ -459,6 +511,7 @@ func OpenReader(name, dir string) (*Reader, error)
 func (r *Reader) Read(dst []byte) (data []byte, info Info, ok bool, err error) // appends to dst
 func (r *Reader) Peek() (info Info, ok bool, err error)                          // no copy, no syscall
 func (r *Reader) Wait(ctx context.Context, lastGeneration uint32, timeout time.Duration) (bool, error)
+func (r *Reader) WaitChan(ctx context.Context, lastGeneration uint32, timeout time.Duration) <-chan WaitResult
 func (r *Reader) WriterAlive() (bool, error)
 func (r *Reader) Describe() (desc ChannelDesc, ok bool, err error)              // ok false: not attached
 func (r *Reader) Close() error
@@ -467,6 +520,7 @@ func ReadValue[T any](r *Reader, v *T) (info Info, ok bool, err error)
 type Info struct { Generation, Length uint32; TimestampNs uint64; Attached bool }
 func (i Info) Age() time.Duration                                                // NowNs() - TimestampNs
 type ChannelDesc struct { Capacity, SlotCount, PayloadType uint32; Notify bool }
+type WaitResult struct { Changed bool; Generation uint32; Err error }           // Wait's results
 
 const NoTimeout time.Duration = -1
 func NowNs() uint64
@@ -526,11 +580,50 @@ var ErrClosed error
   which also bounds the slice) and whether the reader was closed
   (`ErrClosed`). `PSMSGR_E_INTR` is retried: Go installs its own handlers
   with `SA_RESTART`, so it comes only from handlers installed by C code.
+- `WaitChan` is `Wait` for a `select`: it returns a channel (buffered, so
+  nobody has to receive) that delivers one `WaitResult`, with `Wait`'s
+  arguments, results and errors, plus the generation that ended the wait
+  (the `lastGeneration` for the next one).
+  - A timeout of 0 polls at once, in the call. Otherwise the reader goes
+    into a waitset, with a `time.AfterFunc` for a positive timeout and a
+    `context.AfterFunc` for `ctx`; either one takes it out
+    (`psmsgr_waitset_remove`). `ctx` delivers `ctx.Err()`. The timeout
+    then polls once, as `Wait` does at its deadline, because the set may
+    not have scanned a publish yet: it delivers `false`, a change, or
+    `Wait`'s error. If `remove` returns `NODATA`, the event is the answer.
+  - An event with a status other than `OK` is the `*Error` that `Wait`
+    returns for that code (op `"wait"`, `Errno` from `sys_errno`).
+  - The sets are shared by the process, up to `PSMSGR_WAITSET_MAX` (127)
+    readers each, and opened when no set has room: any number of readers
+    can wait. Each set has a goroutine, locked to its OS thread, in
+    `psmsgr_waitset_wait`; it starts with the set and, after 10 s without
+    readers, closes the set and ends. It waits with no timeout if the
+    set has readers, so a timeout, `ctx` or `Close` that takes out the
+    last one wakes it (`psmsgr_waitset_wake`) to start the 10 s; a remove
+    alone doesn't end the wait. An add doesn't wake it: a wait that started
+    without readers ends at its 10 s, and finding readers then, the
+    goroutine waits again, with no timeout. Goroutines don't keep a Go program
+    alive, so it needs no shutdown. The token is a counter, not a Go
+    pointer.
+  - Without `futex_waitv` (`psmsgr_waitset_open` returns `NOTSUP`: Linux <
+    5.16, qemu-user), every `WaitChan` runs `Wait`'s loop on a goroutine
+    of its own, a thread per reader. Then `ctx` and `Close` stop it
+    within 100 ms, as they stop `Wait`, instead of at once, and the
+    generation comes from a `peek` after the wait (0 if the value is gone
+    by then; an `Attached` it carries goes to the next result).
+  - Until the result is delivered, the reader belongs to the wait, as the
+    C API requires: `Wait`, `WriterAlive` and another `WaitChan` fail with
+    `ErrState`, and the other calls must not be made. `Close` is allowed:
+    it takes the reader out of the set first (which can block while the
+    set's goroutine scans its readers, not longer), and the wait delivers
+    `ErrClosed`, unless the event was already reported.
+  - A reader with a wait pending stays reachable from the set, so it is
+    not garbage collected; cancel `ctx` or `Close` it.
 - Handles are not safe for concurrent use, like the C handles. The
-  exception: another goroutine may `Close` a reader during `Wait` or
-  `WriterAlive`. These two take the handle under the reader's mutex and
-  count themselves; `Close` returns at once, and the last of them to
-  return closes the native handle. The other calls read the handle
+  exception: another goroutine may `Close` a reader during `Wait`,
+  `WriterAlive` or `WaitChan`. These take the handle under the reader's
+  mutex and count themselves; `Close` returns at once (after a `WaitChan`'s
+  `remove`), and the last of them to return closes the native handle. The other calls read the handle
   without the mutex (a `Close` concurrent with them is a data race, as
   with any Go value), so the hot path takes no lock.
 - `Close` is idempotent and returns `nil`. `runtime.AddCleanup` closes a

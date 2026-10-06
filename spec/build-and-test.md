@@ -224,8 +224,8 @@ scratch directory, runs pytest against that, and then `ruff check` and
 `interop_helper layout` prints every size, offset and constant of the
 public headers that the bindings mirror, and the bindings compare them, so
 that a C layout change fails the binding tests instead of corrupting data.
-The waitset's (`<psmsgr/waitset.h>`) join it with the first binding that
-uses it.
+That includes `<psmsgr/waitset.h>`'s `psmsgr_waitset_event` and
+`PSMSGR_WAITSET_MAX`.
 Its other commands make it the C agent of the interop suite
 (`interop/README.md`).
 
@@ -260,8 +260,11 @@ A module in `bindings/go` with no dependencies; `go.mod` sets the minimum
 Go version. The package links the C library through cgo, so the tests
 build against a build of it: `CGO_CFLAGS=-I include`,
 `CGO_LDFLAGS=-L <build>` and `LD_LIBRARY_PATH=<build>`. They take
-`tests/interop_helper` (a writer in another process) from
-`$PSMSGR_BUILD_DIR`, and skip only that test when it is unset.
+`tests/interop_helper` (a writer in another process, and the waitset's
+layout) from `$PSMSGR_BUILD_DIR`, and skip only those tests when it is
+unset. The `WaitChan` tests run twice, with waitsets and with the thread
+per reader that replaces them without `futex_waitv` (forced by a switch in
+`export_test.go`); under `qemu-arm` both are the thread per reader.
 
 `bindings/go/check.sh [build-dir [armhf-build-dir]]` (defaults
 `build/release` and `build/armhf-release`) is what CI runs, in the build

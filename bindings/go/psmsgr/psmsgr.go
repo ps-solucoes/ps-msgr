@@ -22,7 +22,7 @@ import (
 // The library version the binding needs: this major, at least this minor.
 const (
 	versionMajor    = 1
-	minVersionMinor = 0
+	minVersionMinor = 1
 )
 
 // Compile-time checks: the header is the major the binding is written for,
