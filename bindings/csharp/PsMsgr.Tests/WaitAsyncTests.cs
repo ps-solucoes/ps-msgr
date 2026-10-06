@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace PsMsgr.Tests;
@@ -389,6 +390,84 @@ public sealed class WaitAsyncTests : ChannelTest
         Assert.Null(seen);
         Assert.NotNull(CallerScope.Value);
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CancelableWaitDropsCallerContext(bool threadPerWait)
+    {
+        // The cancellation callback outlives the WaitAsync too.
+        using var w = OpenWriter(8);
+        using var r = OpenReader();
+        uint gen = w.Publish(B("a"));
+        using var cts = new CancellationTokenSource();
+        (Task<bool> waiting, WeakReference scope) = StartInScope(r, gen, cts.Token, threadPerWait);
+        for (int i = 0; i < 3; i++)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+        }
+        Assert.False(scope.IsAlive);
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => waiting.WaitAsync(Long));
+    }
+
+    // Starts the wait with an AsyncLocal value that only the caller's context keeps.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (Task<bool>, WeakReference) StartInScope(StateReader r, uint gen, CancellationToken token, bool threadPerWait)
+    {
+        var value = new object();
+        CallerScope.Value = value;
+        Task<bool> waiting = r.WaitAsync(gen, Timeout.InfiniteTimeSpan, token, threadPerWait);
+        CallerScope.Value = null;
+        return (waiting, new WeakReference(value));
+    }
+
+    [Fact]
+    public async Task DeadlineDuringAddDoesNotSpin()
+    {
+        using var w = OpenWriter(8);
+        using var r = OpenReader();
+        using var r2 = OpenReader();
+        uint gen = w.Publish(B("a"));
+        Assert.False(await r.WaitAsync(gen, TimeSpan.FromMilliseconds(1)));
+        SkipWithoutWaitSets(false);
+        // Its timeout makes the waiting thread scan the set while r is still being added,
+        // past its deadline.
+        Task<bool> other = r2.WaitAsync(gen, TimeSpan.FromMilliseconds(50));
+        long cpu = -1;
+        WaitSet.BeforeAdd = reader =>
+        {
+            if (reader != r)
+                return;
+            long start = WaitingThreadsCpu();
+            Thread.Sleep(300);
+            cpu = WaitingThreadsCpu() - start;
+        };
+        Task<bool> waiting;
+        try
+        {
+            waiting = r.WaitAsync(gen, TimeSpan.FromTicks(1));
+        }
+        finally
+        {
+            WaitSet.BeforeAdd = null;
+        }
+        Assert.False(await other.WaitAsync(Long));
+        Assert.False(await waiting.WaitAsync(Long));
+        // In clock ticks (10 ms): the 300 ms spent waiting, not spinning.
+        Assert.InRange(cpu, 0, 5);
+    }
+
+    // utime + stime of the waitsets' threads, in clock ticks.
+    private static long WaitingThreadsCpu() => Directory.GetDirectories("/proc/self/task")
+        .Where(t => File.ReadAllText(Path.Combine(t, "comm")).TrimEnd('\n') == "PsMsgr.WaitAsyn")
+        .Sum(t =>
+        {
+            string stat = File.ReadAllText(Path.Combine(t, "stat"));
+            string[] f = stat[(stat.LastIndexOf(')') + 2)..].Split(' ');
+            return long.Parse(f[11]) + long.Parse(f[12]);
+        });
 
     [Fact]
     public async Task WaitingThreadResumesAfterSignals()

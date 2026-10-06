@@ -23,6 +23,8 @@ internal sealed unsafe class WaitSet
     // Null until the first open; then whether the kernel has futex_waitv.
     private static bool? HasWaitSets;
     private static long LastToken;
+    // For the tests: runs between a wait's table entry and its add.
+    internal static Action<StateReader>? BeforeAdd;
 
     private readonly Dictionary<ulong, AsyncWait> _waits = [];
     // Registrations, including those being added: at most WaitSetMax.
@@ -81,6 +83,7 @@ internal sealed unsafe class WaitSet
         w.SetHandle(h);
         lock (Gate)
             set._waits.Add(token, w);
+        BeforeAdd?.Invoke(reader);
         // The table entry comes first: the event may arrive before add returns.
         int rc = Native.psmsgr_waitset_add(set.Ptr, h, lastGeneration, token);
         if (rc != Native.Ok)
@@ -192,9 +195,10 @@ internal sealed unsafe class WaitSet
                 now = Native.psmsgr_now_ns();
                 foreach (AsyncWait w in _waits.Values)
                 {
-                    if (!w.IsWaiting)
+                    // Not those being added: MarkRegistered wakes the thread for them.
+                    if (!w.IsRegistered)
                         continue;
-                    if (w.Deadline <= now && w.IsRegistered)
+                    if (w.Deadline <= now)
                         due.Add(w);
                     else if (w.Deadline < next)
                         next = w.Deadline;
@@ -282,7 +286,6 @@ internal sealed class AsyncWait
     internal ulong Token { get; }
     internal ulong Deadline { get; }
     internal Task<bool> Task => _tcs.Task;
-    internal bool IsWaiting => Volatile.Read(ref _state) <= Registered;
     internal bool IsRegistered => Volatile.Read(ref _state) == Registered;
 
     internal void SetHandle(IntPtr h) => _handle = h;
@@ -318,12 +321,24 @@ internal sealed class AsyncWait
             _tcs.TrySetResult(changed);
     }
 
+    private static readonly Action<object?> OnCanceled = static s => ((AsyncWait)s!).Abort(Outcome.Canceled);
+
     internal bool TryRegister() => Interlocked.CompareExchange(ref _state, Registered, Adding) == Adding;
 
+    // Without the caller's ExecutionContext, which the registration would keep reachable
+    // for as long as the wait lasts (see WaitSet.StartThread).
     internal void WatchCancellation()
     {
-        CancellationTokenRegistration ctr = _cancellationToken.Register(
-            static s => ((AsyncWait)s!).Abort(Outcome.Canceled), this);
+        CancellationTokenRegistration ctr;
+        if (ExecutionContext.IsFlowSuppressed())
+        {
+            ctr = _cancellationToken.Register(OnCanceled, this);
+        }
+        else
+        {
+            using (ExecutionContext.SuppressFlow())
+                ctr = _cancellationToken.Register(OnCanceled, this);
+        }
         bool done;
         lock (_tcs)
         {
