@@ -15,6 +15,9 @@ as described in [`spec/README.md`](spec/README.md).
   an event loop or async runtime doesn't need a blocked thread per reader.
   `psmsgr_waitset_open` returns `NOTSUP` without `futex_waitv` (Linux <
   5.16, qemu-user). The library still creates no threads.
+- `ps_msgr`: `StateReader.wait_async`, an `asyncio` wait on waitsets (one
+  daemon thread per 127 readers, a thread per wait where they are not
+  supported). The binding now needs `libpsmsgr` 1.1.
 - `psmsgr` (Go): `Reader.WaitChan`, a `Wait` for `select` that delivers
   its result on a channel. The waits share waitsets, one goroutine per
   127 readers, with a goroutine per wait where `futex_waitv` is missing.

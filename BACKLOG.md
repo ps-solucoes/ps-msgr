@@ -11,7 +11,6 @@ still keeps a thread blocked in `Wait`. One small PR per binding:
 
 - C#: `WaitAsync` returning a `Task`, completed by one waiting thread per
   process.
-- Python: an `asyncio` wait, completed with `call_soon_threadsafe`.
 
 Each one falls back to a thread per reader where `psmsgr_waitset_open`
 returns `NOTSUP`, adds `psmsgr_waitset_event` and `PSMSGR_WAITSET_MAX` to
