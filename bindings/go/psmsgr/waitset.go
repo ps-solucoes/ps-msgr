@@ -168,6 +168,11 @@ func (w *asyncWait) cancel(res WaitResult) {
 		return
 	}
 	delete(s.waits, w.token)
+	if len(s.waits) == 0 {
+		// The set's wait has no timeout while it has readers: wake it so
+		// that it starts the idle one. s.mu keeps take, so the close, out.
+		C.psmsgr_waitset_wake(s.ws)
+	}
 	s.mu.Unlock()
 	w.finish(res)
 }

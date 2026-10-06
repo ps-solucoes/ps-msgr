@@ -457,7 +457,20 @@ func errString(err error) string {
 	return err.Error()
 }
 
-// An idle waitset closes, and the next wait opens another.
+// noWaitsets waits until every waitset has closed, failing after limit.
+func noWaitsets(t *testing.T, limit time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(limit)
+	for psmsgr.Waitsets() > 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d waitsets still open", psmsgr.Waitsets())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// An idle waitset closes, however its last wait ended, and the next wait
+// opens another.
 func TestWaitChanIdleWaitsetCloses(t *testing.T) {
 	c := newChannel(t)
 	w := c.writer(8, psmsgr.WriterOptions{SlotCount: 2})
@@ -467,14 +480,47 @@ func TestWaitChanIdleWaitsetCloses(t *testing.T) {
 	if !psmsgr.UsesWaitsets() {
 		t.Skip("no futex_waitv: a thread per reader")
 	}
+	// This wakes the sets open, to start the shorter idle timeout.
 	defer psmsgr.SetWaitsetIdle(20 * time.Millisecond)()
-	deadline := time.Now().Add(10 * time.Second)
-	for psmsgr.Waitsets() > 0 {
-		if time.Now().After(deadline) {
-			t.Fatalf("%d waitsets still open", psmsgr.Waitsets())
+	noWaitsets(t, 10*time.Second)
+
+	// From here on nothing wakes the sets but the waits: a set whose last
+	// wait ends without an event must still start its idle timeout.
+	t.Run("timeout", func(t *testing.T) {
+		result(t, r.WaitChan(context.Background(), gen, 30*time.Millisecond))
+		noWaitsets(t, 2*time.Second)
+	})
+	t.Run("ctx", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		ch := r.WaitChan(ctx, gen, psmsgr.NoTimeout)
+		pending(t, ch)
+		cancel()
+		result(t, ch)
+		noWaitsets(t, 2*time.Second)
+	})
+	t.Run("close", func(t *testing.T) {
+		r := c.reader()
+		ch := r.WaitChan(context.Background(), gen, psmsgr.NoTimeout)
+		pending(t, ch)
+		r.Close()
+		result(t, ch)
+		noWaitsets(t, 2*time.Second)
+	})
+	t.Run("several sets", func(t *testing.T) {
+		chans := make([]<-chan psmsgr.WaitResult, psmsgr.WaitsetMax+1)
+		for i := range chans {
+			r := c.reader()
+			chans[i] = r.WaitChan(context.Background(), gen, time.Second)
 		}
-		time.Sleep(10 * time.Millisecond)
-	}
+		if psmsgr.Waitsets() != 2 {
+			t.Fatalf("%d waitsets", psmsgr.Waitsets())
+		}
+		for _, ch := range chans {
+			result(t, ch)
+		}
+		noWaitsets(t, 2*time.Second)
+	})
+
 	ch := r.WaitChan(context.Background(), gen, 10*time.Second)
 	if psmsgr.Waitsets() != 1 {
 		t.Fatalf("%d waitsets", psmsgr.Waitsets())
