@@ -32,6 +32,27 @@ func SetWaitsetIdle(d time.Duration) (restore func()) {
 	return func() { waitsetIdle.Store(old) }
 }
 
+// HoldWaitsets keeps every set's goroutine out of psmsgr_waitset_wait, so
+// that nothing scans the readers, until release. held receives once per
+// goroutine that stops.
+func HoldWaitsets() (held <-chan struct{}, release func()) {
+	ch := make(chan struct{}, 64)
+	stop := make(chan struct{})
+	f := func() {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+		<-stop
+	}
+	beforeWaitsetWait.Store(&f)
+	wakeWaitsets()
+	return ch, func() {
+		beforeWaitsetWait.Store(nil)
+		close(stop)
+	}
+}
+
 // UsesWaitsets reports whether WaitChan uses waitsets: known after its
 // first wait with a timeout.
 func UsesWaitsets() bool {

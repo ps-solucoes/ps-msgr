@@ -152,20 +152,36 @@ func (w *asyncWait) finish(res WaitResult) {
 	w.ch <- res
 }
 
-// cancel ends a registered wait with res (timeout, ctx or Close), unless it
-// ended already. If the set has reported the reader by now, its event is
-// the answer, and the set's goroutine delivers it.
+// cancel ends a registered wait with res (ctx or Close), unless it ended
+// already. If the set has reported the reader by now, its event is the
+// answer, and the set's goroutine delivers it.
 func (w *asyncWait) cancel(res WaitResult) {
+	if w.remove() {
+		w.finish(res)
+	}
+}
+
+// expire ends a registered wait at its timeout, unless it ended already.
+// The set may not have scanned the reader since a publish, so it checks
+// once more, as Wait does at its deadline. The handle is still the wait's.
+func (w *asyncWait) expire() {
+	if w.remove() {
+		w.finish(w.r.waitGeneration(context.Background(), w.h, w.last, 0))
+	}
+}
+
+// remove takes w's reader out of its set; false if the wait ended already
+// or the set has reported it (NODATA).
+func (w *asyncWait) remove() bool {
 	s := w.set
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.waits[w.token] != w {
-		s.mu.Unlock()
-		return
+		return false
 	}
 	// May block while the set's wait scans the readers.
 	if C.psmsgr_waitset_remove(s.ws, w.h) != C.PSMSGR_OK { // NODATA: reported
-		s.mu.Unlock()
-		return
+		return false
 	}
 	delete(s.waits, w.token)
 	if len(s.waits) == 0 {
@@ -173,8 +189,7 @@ func (w *asyncWait) cancel(res WaitResult) {
 		// that it starts the idle one. s.mu keeps take, so the close, out.
 		C.psmsgr_waitset_wake(s.ws)
 	}
-	s.mu.Unlock()
-	w.finish(res)
+	return true
 }
 
 // waitset is a psmsgr_waitset and the goroutine that waits on it.
@@ -199,6 +214,9 @@ var (
 	// noWaitset makes WaitChan use a thread per reader, as without
 	// futex_waitv. For the tests.
 	noWaitset atomic.Bool
+	// beforeWaitsetWait, if set, runs on a set's goroutine before each
+	// psmsgr_waitset_wait. For the tests.
+	beforeWaitsetWait atomic.Pointer[func()]
 )
 
 func init() { waitsetIdle.Store(int64(10 * time.Second)) }
@@ -255,7 +273,7 @@ func register(w *asyncWait, ctx context.Context, timeout time.Duration) (bool, e
 	s.waits[w.token] = w
 	// Their callbacks wait for s.mu, so they see the registration.
 	if timeout > 0 {
-		w.stopTimer = time.AfterFunc(timeout, func() { w.cancel(WaitResult{}) }).Stop
+		w.stopTimer = time.AfterFunc(timeout, w.expire).Stop
 	}
 	w.stopCtx = context.AfterFunc(ctx, func() { w.cancel(WaitResult{Err: ctx.Err()}) })
 	return true, nil
@@ -269,6 +287,9 @@ func (s *waitset) run() {
 	runtime.LockOSThread()
 	var events [waitsetMax]C.psmsgr_waitset_event
 	for {
+		if f := beforeWaitsetWait.Load(); f != nil {
+			(*f)()
+		}
 		s.mu.Lock()
 		timeout := C.int32_t(-1)
 		if len(s.waits) == 0 {

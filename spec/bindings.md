@@ -498,8 +498,10 @@ var ErrClosed error
   - A timeout of 0 polls at once, in the call. Otherwise the reader goes
     into a waitset, with a `time.AfterFunc` for a positive timeout and a
     `context.AfterFunc` for `ctx`; either one takes it out
-    (`psmsgr_waitset_remove`) and delivers `false` or `ctx.Err()`. If
-    `remove` returns `NODATA`, the event is the answer.
+    (`psmsgr_waitset_remove`). `ctx` delivers `ctx.Err()`. The timeout
+    then polls once, as `Wait` does at its deadline, because the set may
+    not have scanned a publish yet: it delivers `false`, a change, or
+    `Wait`'s error. If `remove` returns `NODATA`, the event is the answer.
   - An event with a status other than `OK` is the `*Error` that `Wait`
     returns for that code (op `"wait"`, `Errno` from `sys_errno`).
   - The sets are shared by the process, up to `PSMSGR_WAITSET_MAX` (127)

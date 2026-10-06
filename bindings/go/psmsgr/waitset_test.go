@@ -149,6 +149,29 @@ func TestWaitChanTimeouts(t *testing.T) {
 	})
 }
 
+// A publish that the set has not scanned by the timeout is still a change,
+// as for Wait, which checks once more at its deadline.
+func TestWaitChanTimeoutChecksOnceMore(t *testing.T) {
+	c := newChannel(t)
+	w := c.writer(8, psmsgr.WriterOptions{SlotCount: 2})
+	r := c.reader()
+	gen := must[uint32](t)(w.Publish([]byte("a")))
+	result(t, r.WaitChan(context.Background(), gen, time.Millisecond))
+	if !psmsgr.UsesWaitsets() {
+		t.Skip("no futex_waitv: a thread per reader")
+	}
+	held, release := psmsgr.HoldWaitsets()
+	defer release()
+	ch := r.WaitChan(context.Background(), gen, 50*time.Millisecond)
+	for range psmsgr.Waitsets() { // no set scans from here on
+		<-held
+	}
+	next := must[uint32](t)(w.Publish([]byte("b")))
+	if g := changed(t, ch); g != next {
+		t.Fatalf("generation %d, want %d", g, next)
+	}
+}
+
 func TestWaitChanContext(t *testing.T) {
 	bothWays(t, func(t *testing.T) {
 		c := newChannel(t)
