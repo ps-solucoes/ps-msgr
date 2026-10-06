@@ -445,6 +445,39 @@ def test_fork_starts_over(channel: tuple[StateWriter, StateReader], tmp_path: Pa
     assert os.waitstatus_to_exitcode(status) == 0
 
 
+def test_fork_during_wait(channel: tuple[StateWriter, StateReader]) -> None:
+    # The child doesn't get the set's thread: closing a reader that was
+    # waiting leaves the set behind instead of waiting for that thread.
+    if not _have_waitsets():
+        pytest.skip("psmsgr_waitset_open returns NOTSUP here (no futex_waitv)")
+    w, r = channel
+
+    async def main() -> None:
+        gen = w.publish(b"a")
+        task = asyncio.create_task(r.wait_async(gen))
+        await until(lambda: registered() == 1)
+        await asyncio.sleep(0.05)  # the set's thread is in the kernel
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)  # fork with threads
+            pid = os.fork()
+        if pid == 0:
+            try:
+                r.close()
+            finally:
+                os._exit(0)
+        deadline = time.monotonic() + 5
+        while (done := os.waitpid(pid, os.WNOHANG))[0] == 0 and time.monotonic() < deadline:
+            await asyncio.sleep(0.01)
+        if done[0] == 0:
+            os.kill(pid, 9)
+            os.waitpid(pid, 0)
+        assert done[0] == pid and os.waitstatus_to_exitcode(done[1]) == 0
+        w.publish(b"b")
+        assert await task is True
+
+    run(main)
+
+
 def test_deadline_checks_once(mode: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # A timeout that ends before the set's thread has looked at the reader
     # still checks it once, as wait() does.
@@ -657,9 +690,46 @@ def test_set_failure_fails_its_waits(
             assert r.peek().generation == gen  # the reader is the caller's again
         finally:
             broken.clear()
+        assert _waitset._sets == []  # the failed set takes no new waits
         task = asyncio.create_task(r.wait_async(gen, 10))
         await asyncio.sleep(0.2)  # the set's thread is back in waitset_wait
         w.publish(b"b")
+        assert await task is True
+
+    run(main)
+
+
+def test_set_thread_survives_callback_error(
+    channel: tuple[StateWriter, StateReader], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if not _have_waitsets():
+        pytest.skip("psmsgr_waitset_open returns NOTSUP here (no futex_waitv)")
+    w, r = channel
+    reported: list[BaseException | None] = []
+    monkeypatch.setattr(threading, "excepthook", lambda args: reported.append(args.exc_value))
+    monkeypatch.setattr(_waitset, "_sets", [])
+
+    def broken(status: int, generation: int, sys_errno: int) -> None:
+        raise ValueError("callback failed")
+
+    gen = w.publish(b"a")
+    h = r._enter()
+    try:
+        assert _waitset.register(h, gen, broken) is not None
+        w.publish(b"b")
+        deadline = time.monotonic() + 5
+        while not reported:
+            assert time.monotonic() < deadline
+            time.sleep(0.005)
+    finally:
+        r._leave(h)
+    assert isinstance(reported[0], ValueError)
+    assert _waitset._sets[0].thread is not None and _waitset._sets[0].thread.is_alive()
+
+    async def main() -> None:
+        task = asyncio.create_task(r.wait_async(r.peek().generation, 10))
+        await asyncio.sleep(0.05)
+        w.publish(b"c")
         assert await task is True
 
     run(main)

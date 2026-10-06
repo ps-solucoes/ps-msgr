@@ -27,6 +27,7 @@ unsupported = False
 # Guards the list of sets and each set's registrations.
 _lock = threading.Lock()
 _sets: list[_Set] = []
+_opened: list[_Set] = []  # also the sets that failed and left _sets
 _tokens = itertools.count(1)
 
 
@@ -52,6 +53,11 @@ class Registration:
         True: the callback will not run. False: the set reported the reader
         first, and its thread runs (or ran) the callback; or this was removed
         already."""
+        if self.set.forked:
+            # A fork's child: the set's thread is gone and its locks may be
+            # held, so the reader just leaves the set behind.
+            self.done = True
+            return True
         with self.lock:
             if self.done:
                 return False
@@ -67,12 +73,13 @@ class Registration:
 
 
 class _Set:
-    __slots__ = ("pending", "thread", "ws")
+    __slots__ = ("forked", "pending", "thread", "ws")
 
     def __init__(self, ws: Any) -> None:
         self.ws = ws
         self.pending: dict[int, Registration] = {}
         self.thread: threading.Thread | None = None
+        self.forked = False  # inherited by a fork's child
 
     def run(self) -> None:
         events = (_native.WaitsetEvent * _native.WAITSET_MAX)()
@@ -82,7 +89,13 @@ class _Set:
             if rc == _native.OK:
                 self._deliver(events, n.value)
             elif rc != _native.E_INTR:
-                self._fail(rc, ctypes.get_errno())
+                sys_errno = ctypes.get_errno()
+                # New waits go to other sets; this thread still serves the
+                # adds that raced the failure.
+                with _lock:
+                    if self in _sets:
+                        _sets.remove(self)
+                self._fail(rc, sys_errno)
                 time.sleep(0.1)
 
     # Separate functions, so that their locals don't keep the registrations
@@ -96,7 +109,7 @@ class _Set:
         for reg, status, generation, sys_errno in done:
             with reg.lock:
                 reg.done = True
-            reg.callback(status, generation, sys_errno)
+            _call(reg.callback, status, generation, sys_errno)
 
     def _fail(self, rc: int, sys_errno: int) -> None:
         # Not expected (the set is valid and only this thread waits): fail the
@@ -104,8 +117,22 @@ class _Set:
         with _lock:
             regs = list(self.pending.values())
         for reg in regs:
-            if reg.remove():
-                reg.callback(rc, 0, sys_errno)
+            _call(_fail_one, reg, rc, sys_errno)
+
+
+def _fail_one(reg: Registration, rc: int, sys_errno: int) -> None:
+    if reg.remove():
+        reg.callback(rc, 0, sys_errno)
+
+
+def _call(f: Callable[..., None], *args: Any) -> None:
+    # The set's thread must outlive any one wait: an error is reported like
+    # one that ends a thread, and the thread goes on.
+    try:
+        f(*args)
+    except Exception as e:
+        args = (type(e), e, e.__traceback__, threading.current_thread())
+        threading.excepthook(threading.ExceptHookArgs(args))
 
 
 def register(h: Any, last_generation: int, callback: Callback) -> Registration | None:
@@ -134,6 +161,7 @@ def register(h: Any, last_generation: int, callback: Callback) -> Registration |
             # Only now: a set without its thread would never deliver.
             s.thread = thread
             _sets.append(s)
+            _opened.append(s)
         reg = Registration(s, h, next(_tokens), callback)
         # Before the add: the event can come before the add returns.
         s.pending[reg.token] = reg
@@ -148,9 +176,12 @@ def register(h: Any, last_generation: int, callback: Callback) -> Registration |
 def _after_fork_in_child() -> None:
     # The sets' threads do not exist in the child: start over with new sets.
     # The old ones are left alone, since a thread may have held their locks.
-    global _lock, _sets
+    global _lock, _sets, _opened
+    for s in _opened:
+        s.forked = True
     _lock = threading.Lock()
     _sets = []
+    _opened = []
 
 
 os.register_at_fork(after_in_child=_after_fork_in_child)

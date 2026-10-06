@@ -107,7 +107,9 @@ The rules that apply to all of them (Go differs where its section says so):
   - A set and its thread are created on first use, and when every set is
     full, and stay for the life of the process. The threads are daemon
     threads: they never keep the process alive. A child of `fork` starts
-    over with new sets.
+    over with new sets; closing a reader there that was waiting at the
+    fork leaves the parent's set behind. A set whose `wait` fails takes
+    no new waits, and an error in one delivery doesn't stop its thread.
   - Where `psmsgr_waitset_open` returns `NOTSUP` (Linux < 5.16,
     qemu-user), the binding remembers it and runs each `wait_async` as
     `wait` on a daemon thread of its own.
