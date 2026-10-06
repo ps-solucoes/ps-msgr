@@ -105,7 +105,16 @@ def strerror(code: int) -> str:
     return (_native.strerror(code) or b"").decode()
 
 
-def error(code: int, filename: str | None = None, message: str | None = None) -> PsMsgrError:
-    """The exception for a result code; call right after the failing call."""
-    errno = ctypes.get_errno() if code == _native.E_SYS else None
+def error(
+    code: int,
+    filename: str | None = None,
+    message: str | None = None,
+    errno: int | None = None,
+) -> PsMsgrError:
+    """The exception for a result code. Without ``errno``, call right after
+    the failing call: ``PSMSGR_E_SYS`` takes it from ctypes."""
+    if code != _native.E_SYS:
+        errno = None
+    elif errno is None:
+        errno = ctypes.get_errno()
     return _CLASSES.get(code, PsMsgrError)(code, message, errno, filename)

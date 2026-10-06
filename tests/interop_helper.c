@@ -48,6 +48,12 @@ static int layout(void)
     OFFSET(psmsgr_state_desc, slot_count);
     OFFSET(psmsgr_state_desc, payload_type);
     OFFSET(psmsgr_state_desc, flags);
+    SIZE(psmsgr_waitset_event);
+    OFFSET(psmsgr_waitset_event, token);
+    OFFSET(psmsgr_waitset_event, status);
+    OFFSET(psmsgr_waitset_event, generation);
+    OFFSET(psmsgr_waitset_event, sys_errno);
+    OFFSET(psmsgr_waitset_event, reserved);
 
     CONST(PSMSGR_VERSION_MAJOR);
     CONST(PSMSGR_VERSION_MINOR);
@@ -71,6 +77,7 @@ static int layout(void)
     CONST(PSMSGR_STATE_RECREATE);
     CONST(PSMSGR_STATE_NO_NOTIFY);
     CONST(PSMSGR_INFO_ATTACHED);
+    CONST(PSMSGR_WAITSET_MAX);
     return 0;
 }
 

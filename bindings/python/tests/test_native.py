@@ -29,6 +29,7 @@ def c_layout(helper: Path) -> dict[tuple[str, str], int]:
         ("psmsgr_state_options", _native.StateOptions),
         ("psmsgr_state_info", _native.StateInfo),
         ("psmsgr_state_desc", _native.StateDesc),
+        ("psmsgr_waitset_event", _native.WaitsetEvent),
     ],
 )
 def test_struct_layout(
@@ -72,7 +73,7 @@ def test_options_init_sets_struct_size() -> None:
 def test_version_check() -> None:
     _native.check_version(_native.version(), "lib")
     _native.check_version((1 << 16) | (_native.MIN_VERSION_MINOR << 8) | 7, "lib")
-    for bad in (2 << 16, 0 << 16 | 9 << 8):
+    for bad in (2 << 16, 0 << 16 | 9 << 8, 1 << 16 | (_native.MIN_VERSION_MINOR - 1) << 8 | 9):
         with pytest.raises(ImportError, match=r"needs libpsmsgr 1\.\d+ or a later 1\.x"):
             _native.check_version(bad, "lib")
 
