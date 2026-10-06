@@ -238,6 +238,61 @@ public sealed class WaitAsyncTests : ChannelTest
         }
     }
 
+    // Holding the sets' lock stops the waiting thread before it looks at the deadlines and
+    // the set again. Meanwhile the deadline passes and the value changes: the thread then
+    // removes the reader for the timeout before any scan, and only the check it makes at
+    // the deadline, like Wait's, sees the change.
+    private static void ChangeWhileHeld(Action change)
+    {
+        Monitor.Enter(WaitSet.Gate);
+        try
+        {
+            Thread.Sleep(200); // past the deadline: the thread is back and blocked on the lock
+            change();
+        }
+        finally
+        {
+            Monitor.Exit(WaitSet.Gate);
+        }
+    }
+
+    [Fact]
+    public async Task TimeoutChecksAtTheDeadline()
+    {
+        using (var w = OpenWriter(8, slotCount: 2))
+        using (var r = OpenReader())
+        {
+            uint gen = w.Publish(B("a"));
+            Task<bool> waiting = r.WaitAsync(gen, TimeSpan.FromMilliseconds(50));
+            SkipWithoutWaitSets(false);
+            ChangeWhileHeld(() => w.Publish(B("b")));
+            Assert.True(await waiting.WaitAsync(Long));
+            Assert.True(r.Read(out _) is [(byte)'b']);
+        }
+
+        // An error, as Wait's check would raise: a channel appeared without notification.
+        using (var r = OpenReader("late"))
+        {
+            Task<bool> waiting = r.WaitAsync(0, TimeSpan.FromMilliseconds(50));
+            StateWriter? w = null;
+            try
+            {
+                ChangeWhileHeld(() =>
+                {
+                    w = OpenWriter(8, slotCount: 2, notify: false, name: "late");
+                    w.Publish(B("a"));
+                });
+                var e = await Assert.ThrowsAsync<PsMsgrException>(() => waiting.WaitAsync(Long));
+                Assert.Equal(PsMsgrError.NotSup, e.Code);
+                Assert.Equal("late", e.ChannelName);
+            }
+            finally
+            {
+                w?.Dispose();
+            }
+        }
+    }
+
     [Theory]
     [InlineData(false, 300)] // three waitsets
     [InlineData(true, 20)]

@@ -16,8 +16,9 @@ namespace PsMsgr;
 /// </summary>
 internal sealed unsafe class WaitSet
 {
-    // Guards the list of sets and every set's table, count and deadline.
-    private static readonly object Gate = new();
+    // Guards the list of sets and every set's table, count and deadline. The tests hold it
+    // to stop the waiting thread.
+    internal static readonly object Gate = new();
     private static readonly List<WaitSet> Sets = [];
     // Null until the first open; then whether the kernel has futex_waitv.
     private static bool? HasWaitSets;
@@ -64,7 +65,7 @@ internal sealed unsafe class WaitSet
             return AsyncWait.StartThread(reader, lastGeneration, deadline, cancellationToken);
 
         ulong token = (ulong)Interlocked.Increment(ref LastToken);
-        var w = new AsyncWait(reader, set, token, deadline, cancellationToken);
+        var w = new AsyncWait(reader, set, token, lastGeneration, deadline, cancellationToken);
         IntPtr h;
         try
         {
@@ -183,10 +184,12 @@ internal sealed unsafe class WaitSet
         var reported = new List<(AsyncWait, NativeWaitSetEvent)>();
         while (true)
         {
-            ulong now = Native.psmsgr_now_ns();
+            ulong now;
             ulong next = ulong.MaxValue;
             lock (Gate)
             {
+                // Read under the lock: a thread that waited for it compares fresh time.
+                now = Native.psmsgr_now_ns();
                 foreach (AsyncWait w in _waits.Values)
                 {
                     if (!w.IsWaiting)
@@ -259,16 +262,19 @@ internal sealed class AsyncWait
     private readonly TaskCompletionSource<bool> _tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly StateReader _reader;
     private readonly WaitSet? _set;
+    private readonly uint _lastGeneration;
     private readonly CancellationToken _cancellationToken;
     private CancellationTokenRegistration _ctr; // under lock (_tcs), set unless Done
     private IntPtr _handle;
     private int _state;
 
-    internal AsyncWait(StateReader reader, WaitSet? set, ulong token, ulong deadline, CancellationToken cancellationToken)
+    internal AsyncWait(StateReader reader, WaitSet? set, ulong token, uint lastGeneration, ulong deadline,
+        CancellationToken cancellationToken)
     {
         _reader = reader;
         _set = set;
         Token = token;
+        _lastGeneration = lastGeneration;
         Deadline = deadline;
         _cancellationToken = cancellationToken;
     }
@@ -283,19 +289,19 @@ internal sealed class AsyncWait
 
     internal static Task<bool> StartThread(StateReader reader, uint lastGeneration, ulong deadline, CancellationToken cancellationToken)
     {
-        var w = new AsyncWait(reader, null, 0, deadline, cancellationToken);
+        var w = new AsyncWait(reader, null, 0, lastGeneration, deadline, cancellationToken);
         reader.BeginAsyncWait(w, addRef: false);
-        WaitSet.StartThread(() => w.RunBlocking(lastGeneration), "PsMsgr.Wait");
+        WaitSet.StartThread(w.RunBlocking, "PsMsgr.Wait");
         return w.Task;
     }
 
     // Without waitsets: the synchronous wait, which checks the token and Dispose every 100 ms.
-    private void RunBlocking(uint lastGeneration)
+    private void RunBlocking()
     {
         bool changed;
         try
         {
-            changed = _reader.WaitUntil(lastGeneration, Deadline, _cancellationToken);
+            changed = _reader.WaitUntil(_lastGeneration, Deadline, _cancellationToken);
         }
         catch (OperationCanceledException) when (_cancellationToken.IsCancellationRequested)
         {
@@ -338,12 +344,29 @@ internal sealed class AsyncWait
             return;
         // Blocks while the waiting thread scans the set, at most briefly. NODATA: reported,
         // and the waiting thread finishes it with the event.
-        if (Native.psmsgr_waitset_remove(_set.Ptr, _handle) != Native.Ok || !TryFinish())
+        if (Native.psmsgr_waitset_remove(_set.Ptr, _handle) != Native.Ok)
+            return;
+        bool changed = false;
+        if (how == Outcome.Timeout)
+        {
+            try
+            {
+                changed = CheckAtDeadline();
+            }
+            catch (PsMsgrException e)
+            {
+                error = e;
+            }
+        }
+        if (!TryFinish())
             return;
         switch (how)
         {
+            case Outcome.Timeout when error is not null:
+                _tcs.TrySetException(error);
+                break;
             case Outcome.Timeout:
-                _tcs.TrySetResult(false);
+                _tcs.TrySetResult(changed);
                 break;
             case Outcome.Canceled:
                 _tcs.TrySetCanceled(_cancellationToken);
@@ -354,6 +377,23 @@ internal sealed class AsyncWait
             default:
                 _tcs.TrySetException(error!);
                 break;
+        }
+    }
+
+    // After the timeout removed the reader: the check Wait makes at its deadline, so that a
+    // change (or an error) that the set has not scanned yet is still the result. The reader
+    // and its handle reference still belong to this wait, until TryFinish.
+    private bool CheckAtDeadline()
+    {
+        while (true)
+        {
+            int rc = Native.psmsgr_state_wait(_handle, _lastGeneration, 0);
+            if (rc == Native.Ok)
+                return true;
+            if (rc == (int)PsMsgrError.Timeout)
+                return false;
+            if (rc != (int)PsMsgrError.Intr)
+                throw PsMsgrException.FromResult(rc, _reader.Name);
         }
     }
 

@@ -342,8 +342,10 @@ public enum PsMsgrError { Inval = -1, Sys = -2, NoData = -3, TooSmall = -4, TooB
     waitset, and the event completes the task: `true`, or a fault with the
     `PsMsgrException` that `Wait` throws for the event's status (`NotSup`,
     `Format`, `Sys` with its `errno`).
-  - The timeout is validated, rounded and saturated as for `Wait`; it ends
-    with `false`. A cancellation removes the registration and cancels the
+  - The timeout is validated, rounded and saturated as for `Wait`. When it
+    passes, the waiting thread removes the registration and checks once,
+    as `Wait` does at its deadline: a change the set hasn't scanned yet
+    gives `true`, an error a fault, else `false`. A cancellation removes the registration and cancels the
     task at once (a token canceled before the call: a canceled task, no
     check). A `Dispose` from another thread removes it, which may block
     while the waiting thread scans the set, then closes the reader; the
