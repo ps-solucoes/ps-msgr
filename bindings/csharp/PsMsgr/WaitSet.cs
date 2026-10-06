@@ -128,8 +128,17 @@ internal sealed unsafe class WaitSet
                 throw PsMsgrException.FromResult(rc, null);
             HasWaitSets = true;
             var set = new WaitSet(ws) { _count = 1 };
+            // Listed once its thread runs: a set nobody waits on would hold its waits.
+            try
+            {
+                StartThread(set.Run, "PsMsgr.WaitAsync");
+            }
+            catch
+            {
+                Native.psmsgr_waitset_close(ws);
+                throw;
+            }
             Sets.Add(set);
-            StartThread(set.Run, "PsMsgr.WaitAsync");
             return set;
         }
     }
@@ -141,17 +150,14 @@ internal sealed unsafe class WaitSet
     internal static Thread StartThread(ThreadStart run, string name)
     {
         var t = new Thread(run) { IsBackground = true, Name = name };
-        if (ExecutionContext.IsFlowSuppressed())
-        {
+        using (WithoutCallerContext())
             t.Start();
-        }
-        else
-        {
-            using (ExecutionContext.SuppressFlow())
-                t.Start();
-        }
         return t;
     }
+
+    // ExecutionContext.SuppressFlow, which throws if the flow is suppressed already.
+    internal static AsyncFlowControl? WithoutCallerContext() =>
+        ExecutionContext.IsFlowSuppressed() ? null : ExecutionContext.SuppressFlow();
 
     // After the add: makes the registration one that a timeout, cancellation or Dispose
     // may remove, and wakes the waiting thread if its deadline is earlier than the one it
@@ -294,7 +300,15 @@ internal sealed class AsyncWait
     {
         var w = new AsyncWait(reader, null, 0, lastGeneration, deadline, cancellationToken);
         reader.BeginAsyncWait(w, addRef: false);
-        WaitSet.StartThread(w.RunBlocking, "PsMsgr.Wait");
+        try
+        {
+            WaitSet.StartThread(w.RunBlocking, "PsMsgr.Wait");
+        }
+        catch
+        {
+            reader.EndAsyncWait(release: false);
+            throw;
+        }
         return w.Task;
     }
 
@@ -321,8 +335,6 @@ internal sealed class AsyncWait
             _tcs.TrySetResult(changed);
     }
 
-    private static readonly Action<object?> OnCanceled = static s => ((AsyncWait)s!).Abort(Outcome.Canceled);
-
     internal bool TryRegister() => Interlocked.CompareExchange(ref _state, Registered, Adding) == Adding;
 
     // Without the caller's ExecutionContext, which the registration would keep reachable
@@ -330,15 +342,8 @@ internal sealed class AsyncWait
     internal void WatchCancellation()
     {
         CancellationTokenRegistration ctr;
-        if (ExecutionContext.IsFlowSuppressed())
-        {
-            ctr = _cancellationToken.Register(OnCanceled, this);
-        }
-        else
-        {
-            using (ExecutionContext.SuppressFlow())
-                ctr = _cancellationToken.Register(OnCanceled, this);
-        }
+        using (WaitSet.WithoutCallerContext())
+            ctr = _cancellationToken.Register(static s => ((AsyncWait)s!).Abort(Outcome.Canceled), this);
         bool done;
         lock (_tcs)
         {

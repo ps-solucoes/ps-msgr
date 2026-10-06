@@ -215,6 +215,9 @@ internal static unsafe class Native
     internal static extern int psmsgr_waitset_open(IntPtr* ws);
 
     [DllImport(Library)]
+    internal static extern void psmsgr_waitset_close(IntPtr ws);
+
+    [DllImport(Library)]
     internal static extern int psmsgr_waitset_add(IntPtr ws, IntPtr r, uint lastGeneration, ulong token);
 
     [DllImport(Library)]

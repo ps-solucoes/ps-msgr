@@ -213,8 +213,9 @@ public sealed unsafe class StateReader : IDisposable
     /// once and returns a completed task. A cancellation cancels the task, and a
     /// <see cref="Dispose"/> from another thread faults it with
     /// <see cref="ObjectDisposedException"/>, both at once (within 100 ms where the kernel
-    /// lacks <c>futex_waitv</c>); if the change arrived first, it
-    /// is the result. Errors fault the task with the exception <see cref="Wait"/> throws.
+    /// lacks <c>futex_waitv</c>), but each takes the reader out of its waitset on the calling
+    /// thread, which may block while the set is scanned. If the change or the timeout came
+    /// first, it is the result. Errors fault the task with the exception <see cref="Wait"/> throws.
     /// Until the task completes, the reader belongs to it: any other call on the reader but
     /// <see cref="Dispose"/> throws <see cref="InvalidOperationException"/>. One background
     /// thread per process (per 127 waiting readers) completes these tasks; their
@@ -341,7 +342,9 @@ public sealed unsafe class StateReader : IDisposable
     /// <summary>Closes the reader. Another thread may call it during <see cref="Wait"/>,
     /// <see cref="WaitAsync(uint, TimeSpan, CancellationToken)"/> or
     /// <see cref="IsWriterAlive"/>; the native handle then closes when that call returns.
-    /// It ends an async wait first, which may block briefly.</summary>
+    /// It takes an async wait's reader out of its waitset first, which may block briefly; a
+    /// wait that is still being registered ends right after, once the registration
+    /// finishes.</summary>
     public void Dispose()
     {
         _disposed = true;

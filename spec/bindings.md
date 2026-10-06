@@ -394,12 +394,16 @@ public enum PsMsgrError { Inval = -1, Sys = -2, NoData = -3, TooSmall = -4, TooB
   - The timeout is validated, rounded and saturated as for `Wait`. When it
     passes, the waiting thread removes the registration and checks once,
     as `Wait` does at its deadline: a change the set hasn't scanned yet
-    gives `true`, an error a fault, else `false`. A cancellation removes the registration and cancels the
-    task at once (a token canceled before the call: a canceled task, no
-    check). A `Dispose` from another thread removes it, which may block
-    while the waiting thread scans the set, then closes the reader; the
-    task faults with `ObjectDisposedException`. If the event raced them
-    (`remove` returns `NODATA`), the event is the result.
+    gives `true`, an error a fault, else `false`. A cancellation removes the
+    registration and cancels the task at once (a token canceled before the
+    call: a canceled task, no check). A `Dispose` from another thread
+    removes it, then closes the reader; the task faults with
+    `ObjectDisposedException`. Both remove on the thread that cancels or
+    disposes, which may block while the waiting thread scans the set. A
+    `Dispose` during the add leaves the removal to the `WaitAsync` call,
+    once its add returns, so the task may fault just after `Dispose`
+    returns. If the event raced them (`remove` returns `NODATA`), the event
+    is the result; if the timeout did, the timeout's.
   - A negative timeout, a disposed reader, or a reader already in a
     `WaitAsync`, throw at once instead of faulting the task.
   - Until the task completes, the set owns the reader: every other call on
@@ -414,13 +418,17 @@ public enum PsMsgrError { Inval = -1, Sys = -2, NoData = -3, TooSmall = -4, TooB
     `PSMSGR_WAITSET_MAX` (127) readers; more concurrent waits open more
     sets, each with its thread. The first `WaitAsync` that registers opens
     the first set and starts its thread; sets and threads stay for the life
-    of the process, blocked in the kernel while idle. The threads start
-    without the caller's `ExecutionContext`, so they keep none of its
-    `AsyncLocal` values (an `Activity`, a logging scope) reachable.
+    of the process, blocked in the kernel while idle. A set is listed only
+    once its thread has started: if the thread cannot start, the set is
+    closed and `WaitAsync` throws. The threads start, and the cancellation
+    callbacks are registered, without the caller's `ExecutionContext`, so
+    they keep none of its `AsyncLocal` values (an `Activity`, a logging
+    scope) reachable.
   - Where `psmsgr_waitset_open` returns `NOTSUP` (Linux < 5.16,
     qemu-user), each `WaitAsync` runs `Wait` on a background thread of its
     own instead, so a cancellation or `Dispose` takes effect within
-    100 ms. The tests run both ways, through an internal switch.
+    100 ms. If that thread cannot start, `WaitAsync` throws and the reader
+    is free again. The tests run both ways, through an internal switch.
 - `WriteScope` holds only an id; the writer holds the state. So copies of a
   scope, including the read-only variable of a `using`, stay coherent: a
   commit through one ends them all, and `Dispose` after a commit does

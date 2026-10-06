@@ -459,15 +459,18 @@ public sealed class WaitAsyncTests : ChannelTest
         Assert.InRange(cpu, 0, 5);
     }
 
+    // The /proc/self/task directories of the waitsets' threads. The kernel truncates thread
+    // names to 15 bytes.
+    private static IEnumerable<string> WaitingThreads() => Directory.GetDirectories("/proc/self/task")
+        .Where(t => File.ReadAllText(Path.Combine(t, "comm")).TrimEnd('\n') == "PsMsgr.WaitAsyn");
+
     // utime + stime of the waitsets' threads, in clock ticks.
-    private static long WaitingThreadsCpu() => Directory.GetDirectories("/proc/self/task")
-        .Where(t => File.ReadAllText(Path.Combine(t, "comm")).TrimEnd('\n') == "PsMsgr.WaitAsyn")
-        .Sum(t =>
-        {
-            string stat = File.ReadAllText(Path.Combine(t, "stat"));
-            string[] f = stat[(stat.LastIndexOf(')') + 2)..].Split(' ');
-            return long.Parse(f[11]) + long.Parse(f[12]);
-        });
+    private static long WaitingThreadsCpu() => WaitingThreads().Sum(t =>
+    {
+        string stat = File.ReadAllText(Path.Combine(t, "stat"));
+        string[] f = stat[(stat.LastIndexOf(')') + 2)..].Split(' ');
+        return long.Parse(f[11]) + long.Parse(f[12]);
+    });
 
     [Fact]
     public async Task WaitingThreadResumesAfterSignals()
@@ -478,11 +481,7 @@ public sealed class WaitAsyncTests : ChannelTest
         var sw = Stopwatch.StartNew();
         Task<bool> waiting = r.WaitAsync(gen, TimeSpan.FromMilliseconds(300));
         SkipWithoutWaitSets(false);
-        // The kernel truncates thread names to 15 bytes.
-        int[] tids = Directory.GetDirectories("/proc/self/task")
-            .Where(t => File.ReadAllText(Path.Combine(t, "comm")).TrimEnd('\n') == "PsMsgr.WaitAsyn")
-            .Select(t => int.Parse(Path.GetFileName(t)))
-            .ToArray();
+        int[] tids = WaitingThreads().Select(t => int.Parse(Path.GetFileName(t))).ToArray();
         Assert.NotEmpty(tids);
         int sent = 0;
         while (!waiting.IsCompleted)
