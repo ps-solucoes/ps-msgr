@@ -6,6 +6,9 @@ namespace PsMsgr.Tests;
 
 /// <summary>StateReader.WaitAsync, on waitsets and (threadPerWait) the fallback without
 /// futex_waitv, which the internal overload forces.</summary>
+// Not in parallel with StateTests: a child process it starts holds this class's
+// channel lock files until its exec, and an Unlink then fails with WriterExists.
+[Collection("Channels")]
 public sealed class WaitAsyncTests : ChannelTest
 {
     private static readonly TimeSpan Long = TimeSpan.FromSeconds(10);
