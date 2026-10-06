@@ -100,12 +100,25 @@ static void lock_held_on_old_inode_is_not_a_writer(void **state)
     close(held_fd);
 }
 
+/* ---- waitset ------------------------------------------------------------------ */
+
+static void waitset_needs_futex_waitv(void **state)
+{
+    psmsgr_waitset *ws = (psmsgr_waitset *)1;
+    psmi_test_waitv_enosys = true;
+    int rc = psmsgr_waitset_open(&ws);
+    psmi_test_waitv_enosys = false;
+    assert_rc(rc, PSMSGR_E_NOTSUP);
+    assert_null(ws);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
         TEST(generation_wraps_skipping_zero),
         TEST(unlink_racing_open_never_gives_two_writers),
         TEST(lock_held_on_old_inode_is_not_a_writer),
+        TEST(waitset_needs_futex_waitv),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

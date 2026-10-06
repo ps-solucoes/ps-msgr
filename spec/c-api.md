@@ -11,7 +11,8 @@ Status: **final**. Protocol semantics are defined in
   from the failing system call.
 - Handles are opaque. A handle is **not** thread-safe: synchronize externally
   or use one handle per thread. Different handles are independent, including
-  handles to the same channel.
+  handles to the same channel. The one exception is a waitset's `add`,
+  `remove` and `wake`, which any thread may call.
 - Handles are not valid in a `fork()`ed child. All descriptors are
   `O_CLOEXEC`.
 - Nothing allocates or takes a lock on the hot path (`publish`,
@@ -21,14 +22,15 @@ Status: **final**. Protocol semantics are defined in
   can't serve it (always on the AM335x, about 1.3 µs; see
   state-channel.md §8).
 - The library never writes to stdout/stderr, never installs signal handlers,
-  never calls `exit`/`abort`, and keeps no global mutable state apart from
-  handles.
+  never calls `exit`/`abort`, never creates threads, and keeps no global
+  mutable state apart from handles.
 - Only the `PSMSGR_API` functions are exported (`-fvisibility=hidden`, an
   export macro, and a version script, `src/libpsmsgr.map`, that lists each
   one). Functions released in 1.0 have version `PSMSGR_1`. Functions added
   in 1.x go in a new node `PSMSGR_1.<minor>`, which inherits from the
-  previous node. Released nodes never change. Removing or changing an
-  exported function is an ABI break and bumps the SONAME.
+  previous node: 1.1 added `PSMSGR_1.1`, the waitset. Released nodes never
+  change. Removing or changing an exported function is an ABI break and
+  bumps the SONAME.
 - ABI extensibility: structs passed *in* start with `struct_size`, the size
   of the caller's struct. The library reads only the fields that size covers
   and that it knows. Their `*_init` function is `static inline` in the
@@ -51,7 +53,7 @@ Status: **final**. Protocol semantics are defined in
 /* Library major == SONAME number. The first release is 1.0.0; until then the
  * API/ABI may change freely. */
 #define PSMSGR_VERSION_MAJOR 1
-#define PSMSGR_VERSION_MINOR 0
+#define PSMSGR_VERSION_MINOR 1
 #define PSMSGR_VERSION_PATCH 0
 
 /* (major << 16) | (minor << 8) | patch of the loaded library. */
@@ -67,16 +69,17 @@ enum {
     PSMSGR_OK              =   0,
     PSMSGR_E_INVAL         =  -1,  /* bad argument or channel name            */
     PSMSGR_E_SYS           =  -2,  /* system call failed; see errno           */
-    PSMSGR_E_NODATA        =  -3,  /* channel absent or nothing published yet */
+    PSMSGR_E_NODATA        =  -3,  /* channel absent, nothing published yet, or
+                                    * reader not in the waitset              */
     PSMSGR_E_TOOSMALL      =  -4,  /* buffer too small; info->length is valid */
-    PSMSGR_E_TOOBIG        =  -5,  /* payload larger than capacity            */
+    PSMSGR_E_TOOBIG        =  -5,  /* payload over capacity, or waitset full  */
     PSMSGR_E_BUSY          =  -6,  /* read retries exhausted; transient, retry */
     PSMSGR_E_TIMEOUT       =  -7,
     PSMSGR_E_INTR          =  -8,  /* wait interrupted by a signal            */
     PSMSGR_E_WRITER_EXISTS =  -9,  /* another writer holds the channel        */
     PSMSGR_E_MISMATCH      = -10,  /* existing channel has other geometry     */
     PSMSGR_E_FORMAT        = -11,  /* bad magic/version/size, corrupt file    */
-    PSMSGR_E_NOTSUP        = -12,  /* e.g. wait on a NO_NOTIFY channel        */
+    PSMSGR_E_NOTSUP        = -12,  /* NO_NOTIFY channel; no futex_waitv       */
     PSMSGR_E_STATE         = -13,  /* call not valid now, e.g. commit w/o begin */
 };
 ```
@@ -222,6 +225,86 @@ static inline int psmsgr_state_describe(psmsgr_state_reader *r, psmsgr_state_des
  * OK | NODATA (absent) | WRITER_EXISTS | INVAL | SYS. */
 int  psmsgr_state_unlink(const char *name, const char *dir);
 ```
+
+## `<psmsgr/waitset.h>`
+
+Added in 1.1. A waitset lets one thread wait for many readers at once
+(state-channel.md §6.7), so that an event loop or an async runtime needs one
+blocked thread instead of one per reader. The library creates no thread:
+the caller dedicates one to `wait` and hands its events to the loop; other
+threads add and remove readers. It needs `futex_waitv` (Linux 5.16). Where
+that is missing, `open` returns `NOTSUP` and callers keep a thread per
+reader in `psmsgr_state_wait`.
+
+```c
+/* Readers per waitset: futex_waitv takes 128 futexes, one is the set's own. */
+#define PSMSGR_WAITSET_MAX 127
+
+typedef struct psmsgr_waitset psmsgr_waitset;
+
+/* A registration that finished. Fixed layout: wait fills an array of these. */
+typedef struct psmsgr_waitset_event {
+    uint64_t token;       /* as passed to psmsgr_waitset_add */
+    int32_t  status;      /* OK: the generation differs from last_generation; else what
+                           * psmsgr_state_wait would return: NOTSUP | FORMAT | SYS */
+    uint32_t generation;  /* status OK: the generation now; else 0 */
+    int32_t  sys_errno;   /* status SYS: errno of the failed call; else 0 */
+    uint32_t reserved;    /* 0 */
+} psmsgr_waitset_event;   /* 24 bytes */
+
+/* Creates an empty waitset. NOTSUP without futex_waitv: Linux < 5.16,
+ * qemu-user, or a seccomp filter that returns ENOSYS or EPERM.
+ * Errors: INVAL, NOTSUP, SYS (ENOMEM). */
+int  psmsgr_waitset_open(psmsgr_waitset **out);
+
+/* Frees the set. Registered readers stay open and are the caller's again. No
+ * other call on the set may be in progress. NULL is a no-op. */
+void psmsgr_waitset_close(psmsgr_waitset *ws);
+
+/* Registers r until its generation differs from last_generation (0 = "any
+ * value"), with psmsgr_state_wait's semantics; token comes back in the event.
+ * The set owns r until wait reports it or remove succeeds: until then the
+ * caller must not use r in any way, including close. May block while another
+ * thread's wait scans the set (attaching channels).
+ * OK | INVAL | TOOBIG (PSMSGR_WAITSET_MAX registered) | STATE (r is registered). */
+int  psmsgr_waitset_add(psmsgr_waitset *ws, psmsgr_state_reader *r,
+                        uint32_t last_generation, uint64_t token);
+
+/* Unregisters r; the caller may close it as soon as this returns, even while
+ * another thread is blocked in wait. Blocks until that wait has left the
+ * kernel, which it does at once.
+ * OK | NODATA (not registered: never added, or already reported) | INVAL. */
+int  psmsgr_waitset_remove(psmsgr_waitset *ws, psmsgr_state_reader *r);
+
+/* Blocks until a registered reader finishes or psmsgr_waitset_wake is called.
+ * Writes up to cap events and sets *n; reported readers are unregistered and
+ * the caller's again, the rest stay registered. One thread at a time.
+ * timeout_ms < 0: infinite, 0: check once.
+ * OK (*n >= 1, or 0 after a wake) | TIMEOUT | INTR | STATE (another thread is
+ * in wait) | INVAL | SYS. *n is 0 unless OK. */
+int  psmsgr_waitset_wait(psmsgr_waitset *ws, int32_t timeout_ms,
+                         psmsgr_waitset_event *events, uint32_t cap, uint32_t *n);
+
+/* Makes the current wait return, or the next one if none is in progress. Any
+ * thread; never blocks. NULL is a no-op. */
+void psmsgr_waitset_wake(psmsgr_waitset *ws);
+```
+
+- A registration is one-shot: to keep following a reader, add it again with
+  the event's `generation`. A reported reader is not touched by the set
+  again, so the caller may read or close it while the waiting thread goes
+  on.
+- A cancellation that races a report: `remove` returns `NODATA` and the
+  event is the answer.
+- `wake` is how another thread stops the waiting one: set a flag, `wake`,
+  join, then `close`. A wake while no `wait` is in progress ends the next
+  one.
+- The set takes an internal lock (a futex, not `pthread_mutex`). `wait`
+  holds it while it scans the readers, which includes attaching channels,
+  so `add` and `remove` can block for that long. `read`, `peek` and
+  `publish` take no lock and are unaffected.
+- 127 readers per set. More readers need more sets, each with its own
+  waiting thread.
 
 ## Usage (non-normative)
 

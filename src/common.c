@@ -19,7 +19,7 @@ const char *psmsgr_strerror(int code)
     case PSMSGR_E_SYS:           return "system call failed";
     case PSMSGR_E_NODATA:        return "no data";
     case PSMSGR_E_TOOSMALL:      return "buffer too small";
-    case PSMSGR_E_TOOBIG:        return "payload larger than capacity";
+    case PSMSGR_E_TOOBIG:        return "payload larger than capacity, or waitset full";
     case PSMSGR_E_BUSY:          return "channel busy";
     case PSMSGR_E_TIMEOUT:       return "timed out";
     case PSMSGR_E_INTR:          return "interrupted";

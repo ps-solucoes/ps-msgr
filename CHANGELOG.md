@@ -9,6 +9,12 @@ as described in [`spec/README.md`](spec/README.md).
 
 ### Added
 
+- `libpsmsgr` 1.1: waitsets (`<psmsgr/waitset.h>`, symbol version
+  `PSMSGR_1.1`). One caller-owned thread waits for up to 127 readers at
+  once with `futex_waitv` and gets one event per finished reader, so that
+  an event loop or async runtime doesn't need a blocked thread per reader.
+  `psmsgr_waitset_open` returns `NOTSUP` without `futex_waitv` (Linux <
+  5.16, qemu-user). The library still creates no threads.
 - `release` workflow: a `v*` tag creates the GitHub release, with the
   `.deb` packages, the `.nupkg` and the `.whl` attached.
 

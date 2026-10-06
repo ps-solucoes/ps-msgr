@@ -51,7 +51,7 @@ RFC 2119. Sections marked *non-normative* are guidance only.
 |---|---|
 | Repository | `ps-msgr` |
 | C library / SONAME | `libpsmsgr` / `libpsmsgr.so.1` |
-| C headers | `<psmsgr/psmsgr.h>` (umbrella), `<psmsgr/state.h>` |
+| C headers | `<psmsgr/psmsgr.h>` (umbrella), `<psmsgr/state.h>`, `<psmsgr/waitset.h>` |
 | C symbol prefix | `psmsgr_`, `PSMSGR_` |
 | Python distribution / import | `ps-msgr` / `ps_msgr` |
 | C# package / namespace | `PsMsgr` |
