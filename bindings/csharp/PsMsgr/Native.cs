@@ -36,15 +36,25 @@ internal struct NativeDesc
     public uint Flags;
 }
 
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeWaitSetEvent
+{
+    public ulong Token;
+    public int Status;
+    public uint Generation;
+    public int SysErrno;
+    public uint Reserved;
+}
+
 /// <summary>
-/// libpsmsgr.so.1 (include/psmsgr/psmsgr.h, state.h). Blittable signatures
+/// libpsmsgr.so.1 (include/psmsgr/psmsgr.h, state.h, waitset.h). Blittable signatures
 /// only, so that neither the JIT nor Native AOT generates marshalling code.
 /// </summary>
 internal static unsafe class Native
 {
     public const string Library = "libpsmsgr.so.1";
     public const uint VersionMajor = 1;
-    public const uint MinVersionMinor = 0;
+    public const uint MinVersionMinor = 1;
 
     public const int Ok = 0;
     public const int NameMax = 64;
@@ -53,6 +63,7 @@ internal static unsafe class Native
     public const uint StateRecreate = 1u << 0;
     public const uint StateNoNotify = 1u << 1;
     public const uint InfoAttached = 1u << 0;
+    public const int WaitSetMax = 127;
 
     private const int RtldNow = 0x2;
     private const int RtldGlobal = 0x100;
@@ -199,6 +210,24 @@ internal static unsafe class Native
 
     [DllImport(Library, SetLastError = true)]
     internal static extern int psmsgr_state_unlink(byte* name, byte* dir);
+
+    [DllImport(Library, SetLastError = true)]
+    internal static extern int psmsgr_waitset_open(IntPtr* ws);
+
+    [DllImport(Library)]
+    internal static extern void psmsgr_waitset_close(IntPtr ws);
+
+    [DllImport(Library)]
+    internal static extern int psmsgr_waitset_add(IntPtr ws, IntPtr r, uint lastGeneration, ulong token);
+
+    [DllImport(Library)]
+    internal static extern int psmsgr_waitset_remove(IntPtr ws, IntPtr r);
+
+    [DllImport(Library, SetLastError = true)]
+    internal static extern int psmsgr_waitset_wait(IntPtr ws, int timeoutMs, NativeWaitSetEvent* events, uint cap, uint* n);
+
+    [DllImport(Library)]
+    internal static extern void psmsgr_waitset_wake(IntPtr ws);
 }
 
 internal sealed class WriterHandle : SafeHandle

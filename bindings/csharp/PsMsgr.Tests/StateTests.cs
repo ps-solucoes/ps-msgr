@@ -5,6 +5,7 @@ using System.Text;
 namespace PsMsgr.Tests;
 
 /// <summary>The C unit tests (tests/test_state.c), where relevant, through the binding.</summary>
+[Collection("Channels")]
 public sealed class StateTests : ChannelTest
 {
     private static byte[] B(string s) => Encoding.UTF8.GetBytes(s);

@@ -41,6 +41,9 @@ public sealed unsafe class NativeTests
             ("flags", "Flags"), ("reserved", "Reserved"));
         AssertLayout<NativeDesc>("psmsgr_state_desc",
             ("capacity", "Capacity"), ("slot_count", "SlotCount"), ("payload_type", "PayloadType"), ("flags", "Flags"));
+        AssertLayout<NativeWaitSetEvent>("psmsgr_waitset_event",
+            ("token", "Token"), ("status", "Status"), ("generation", "Generation"), ("sys_errno", "SysErrno"),
+            ("reserved", "Reserved"));
     }
 
     [Fact]
@@ -56,6 +59,7 @@ public sealed unsafe class NativeTests
         Assert.Equal(Native.StateRecreate, consts["PSMSGR_STATE_RECREATE"]);
         Assert.Equal(Native.StateNoNotify, consts["PSMSGR_STATE_NO_NOTIFY"]);
         Assert.Equal(Native.InfoAttached, consts["PSMSGR_INFO_ATTACHED"]);
+        Assert.Equal(Native.WaitSetMax, consts["PSMSGR_WAITSET_MAX"]);
 
         var errors = consts.Where(kv => kv.Key.StartsWith("PSMSGR_E_", StringComparison.Ordinal))
             .ToDictionary(kv => kv.Key["PSMSGR_E_".Length..].Replace("_", ""), kv => kv.Value, StringComparer.OrdinalIgnoreCase);

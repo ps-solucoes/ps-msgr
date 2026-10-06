@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 using System;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace PsMsgr;
 
@@ -28,6 +29,11 @@ public sealed unsafe class StateReader : IDisposable
     // Set by Dispose. The handle alone can't tell: it stays open while Wait or
     // IsWriterAlive holds a reference, and doesn't report closed until released.
     private volatile bool _disposed;
+    // The WaitAsync in progress: until it ends, the reader belongs to it.
+    private AsyncWait? _asyncWait;
+
+    private static readonly Task<bool> Changed = Task.FromResult(true);
+    private static readonly Task<bool> Unchanged = Task.FromResult(false);
 
     private StateReader(ReaderHandle handle, string name)
     {
@@ -195,20 +201,71 @@ public sealed unsafe class StateReader : IDisposable
     /// </summary>
     public bool Wait(uint lastGeneration, TimeSpan timeout, CancellationToken cancellationToken = default)
     {
-        bool infinite = timeout == Timeout.InfiniteTimeSpan;
-        if (!infinite && timeout < TimeSpan.Zero)
-            throw new ArgumentOutOfRangeException(nameof(timeout), timeout, "must be non-negative or Timeout.InfiniteTimeSpan");
-        ulong deadline = 0;
-        if (!infinite)
+        ulong deadline = Deadline(timeout);
+        Handle();
+        return WaitUntil(lastGeneration, deadline, cancellationToken);
+    }
+
+    /// <summary>
+    /// <see cref="Wait"/> without blocking a thread: the task completes with true when the
+    /// generation differs from <paramref name="lastGeneration"/>, false on timeout. The
+    /// timeout means the same as for <see cref="Wait"/>; <see cref="TimeSpan.Zero"/> polls
+    /// once and returns a completed task. A cancellation cancels the task, and a
+    /// <see cref="Dispose"/> from another thread faults it with
+    /// <see cref="ObjectDisposedException"/>, both at once (within 100 ms where the kernel
+    /// lacks <c>futex_waitv</c>), but each takes the reader out of its waitset on the calling
+    /// thread, which may block while the set is scanned. If the change or the timeout came
+    /// first, it is the result. Errors fault the task with the exception <see cref="Wait"/> throws.
+    /// Until the task completes, the reader belongs to it: any other call on the reader but
+    /// <see cref="Dispose"/> throws <see cref="InvalidOperationException"/>. One background
+    /// thread per process (per 127 waiting readers) completes these tasks; their
+    /// continuations never run on it.
+    /// </summary>
+    public Task<bool> WaitAsync(uint lastGeneration, TimeSpan timeout, CancellationToken cancellationToken = default)
+        => WaitAsync(lastGeneration, timeout, cancellationToken, threadPerWait: false);
+
+    // threadPerWait: what happens without futex_waitv, for the tests.
+    internal Task<bool> WaitAsync(uint lastGeneration, TimeSpan timeout, CancellationToken cancellationToken, bool threadPerWait)
+    {
+        ulong deadline = Deadline(timeout);
+        Handle();
+        if (cancellationToken.IsCancellationRequested)
+            return Task.FromCanceled<bool>(cancellationToken);
+        try
         {
-            // Saturates: a timeout beyond 2^64 ns (585 years) is infinite in effect.
-            ulong ns = (ulong)timeout.Ticks * 100;
-            if (ns / 100 != (ulong)timeout.Ticks)
-                ns = ulong.MaxValue;
-            ulong now = Native.psmsgr_now_ns();
-            deadline = ulong.MaxValue - now < ns ? ulong.MaxValue : now + ns;
+            // The first check here: a value that changed already needs no registration.
+            if (WaitUntil(lastGeneration, 0, default))
+                return Changed;
+            if (timeout == TimeSpan.Zero)
+                return Unchanged;
+            return WaitSet.Start(this, lastGeneration, deadline, cancellationToken, threadPerWait);
         }
-        IntPtr h = AddRef();
+        catch (PsMsgrException e)
+        {
+            return Task.FromException<bool>(e);
+        }
+    }
+
+    // The CLOCK_MONOTONIC deadline of a timeout; ulong.MaxValue for none.
+    private static ulong Deadline(TimeSpan timeout)
+    {
+        if (timeout == Timeout.InfiniteTimeSpan)
+            return ulong.MaxValue;
+        if (timeout < TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(timeout), timeout, "must be non-negative or Timeout.InfiniteTimeSpan");
+        // Saturates: a timeout beyond 2^64 ns (585 years) is infinite in effect.
+        ulong ns = (ulong)timeout.Ticks * 100;
+        if (ns / 100 != (ulong)timeout.Ticks)
+            return ulong.MaxValue;
+        ulong now = Native.psmsgr_now_ns();
+        return ulong.MaxValue - now < ns ? ulong.MaxValue : now + ns;
+    }
+
+    // Wait, also on the thread of an async wait without waitsets.
+    internal bool WaitUntil(uint lastGeneration, ulong deadline, CancellationToken cancellationToken)
+    {
+        bool infinite = deadline == ulong.MaxValue;
+        IntPtr h = AddRefCore();
         try
         {
             while (true)
@@ -282,16 +339,43 @@ public sealed unsafe class StateReader : IDisposable
         throw PsMsgrException.FromResult(rc, _name);
     }
 
-    /// <summary>Closes the reader. Another thread may call it during <see cref="Wait"/> or
-    /// <see cref="IsWriterAlive"/>; the native handle then closes when that call returns.</summary>
+    /// <summary>Closes the reader. Another thread may call it during <see cref="Wait"/>,
+    /// <see cref="WaitAsync(uint, TimeSpan, CancellationToken)"/> or
+    /// <see cref="IsWriterAlive"/>; the native handle then closes when that call returns.
+    /// It takes an async wait's reader out of its waitset first, which may block briefly; a
+    /// wait that is still being registered ends right after, once the registration
+    /// finishes.</summary>
     public void Dispose()
     {
         _disposed = true;
+        // Pairs with the async wait's check of _disposed once registered.
+        Interlocked.MemoryBarrier();
+        Volatile.Read(ref _asyncWait)?.Abort(AsyncWait.Outcome.Disposed);
         _handle.Dispose();
         _buf = null;
     }
 
     internal int BufferLength => _buf?.Length ?? 0;
+
+    internal string Name => _name;
+
+    internal bool IsDisposed => _disposed;
+
+    // The reader belongs to w until EndAsyncWait. addRef: w registers the native handle
+    // with a waitset, so it must stay open until then.
+    internal IntPtr BeginAsyncWait(AsyncWait w, bool addRef)
+    {
+        IntPtr h = addRef ? AddRefCore() : IntPtr.Zero;
+        Volatile.Write(ref _asyncWait, w);
+        return h;
+    }
+
+    internal void EndAsyncWait(bool release)
+    {
+        Volatile.Write(ref _asyncWait, null);
+        if (release)
+            _handle.DangerousRelease();
+    }
 
     private bool TakeAttached(in NativeInfo ni)
     {
@@ -322,6 +406,8 @@ public sealed unsafe class StateReader : IDisposable
     {
         if (_disposed)
             throw new ObjectDisposedException(nameof(StateReader));
+        if (_asyncWait is not null)
+            throw new InvalidOperationException("the reader is in a WaitAsync");
         return _handle.DangerousGetHandle();
     }
 
@@ -329,9 +415,16 @@ public sealed unsafe class StateReader : IDisposable
     // stays open until the matching DangerousRelease. Throws if already disposed.
     private IntPtr AddRef()
     {
-        IntPtr h = Handle();
+        Handle();
+        return AddRefCore();
+    }
+
+    private IntPtr AddRefCore()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(StateReader));
         bool added = false;
         _handle.DangerousAddRef(ref added);
-        return h;
+        return _handle.DangerousGetHandle();
     }
 }
