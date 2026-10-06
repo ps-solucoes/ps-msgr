@@ -224,8 +224,8 @@ scratch directory, runs pytest against that, and then `ruff check` and
 `interop_helper layout` prints every size, offset and constant of the
 public headers that the bindings mirror, and the bindings compare them, so
 that a C layout change fails the binding tests instead of corrupting data.
-The waitset's (`<psmsgr/waitset.h>`) join it with the first binding that
-uses it.
+That includes `<psmsgr/waitset.h>`'s `psmsgr_waitset_event` and
+`PSMSGR_WAITSET_MAX`.
 Its other commands make it the C agent of the interop suite
 (`interop/README.md`).
 
