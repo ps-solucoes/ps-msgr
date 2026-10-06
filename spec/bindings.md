@@ -53,7 +53,8 @@ The rules that apply to all of them (Go differs where its section says so):
   runtime dependencies. `ctypes`, so it is a pure-Python wheel, built with
   setuptools.
 - Every C function is declared with explicit `argtypes` and `restype`, and
-  the three structs are mirrored as `ctypes.Structure`. Options are set up
+  the four structs (with `psmsgr_waitset_event`) are mirrored as
+  `ctypes.Structure`. Options are set up
   with `psmsgr_state_options_init_sized(opt, sizeof(opt))`, and `describe`
   calls `psmsgr_state_describe_sized(r, desc, sizeof(desc))`. The binding's
   tests compare every size, offset and constant with a helper compiled from
@@ -61,10 +62,12 @@ The rules that apply to all of them (Go differs where its section says so):
 - Loading: `ctypes` opens `$PSMSGR_LIBRARY` if set, else `libpsmsgr.so.1`.
   A missing library, a missing symbol or an incompatible version raises
   `ImportError` at import, naming the library and what is wrong.
-- The GIL: `wait` and the calls that do file system work (opening a
+- The GIL: `wait`, the waitset's `wait`, `add` and `remove` (which wait
+  for a scan) and the calls that do file system work (opening a
   writer or a reader, `writer_alive`, `unlink`) release it, so a blocking
   `wait` doesn't stall other threads. `publish`, `read`, `peek`,
-  `describe`, `now_ns` and `close` keep it (`ctypes.PyDLL`): releasing and
+  `describe`, `now_ns`, `close` and the waitset's `open`, `close` and
+  `wake` keep it (`ctypes.PyDLL`): releasing and
   reacquiring the GIL would cost more than these calls, and with other busy
   threads reacquiring can take a whole switch interval.
 - When `wait` gets `PSMSGR_E_INTR`, the binding returns to the interpreter
@@ -95,6 +98,38 @@ The rules that apply to all of them (Go differs where its section says so):
   when it returns, and `wait` raises `ValueError` before its next slice.
   This is the way to stop a thread blocked in `wait(timeout=None)`. A
   per-reader lock and a count of those calls in progress implement it.
+- `wait_async` is `wait` for `asyncio` (it needs library 1.1), without a
+  blocked thread per reader. It registers the reader in a waitset
+  (c-api.md): one thread per set of up to 127 readers waits in
+  `psmsgr_waitset_wait` and completes each wait on its own event loop with
+  `call_soon_threadsafe`, so any number of loops, in any threads, share
+  the sets.
+  - A set and its thread are created on first use, and when every set is
+    full, and stay for the life of the process. The threads are daemon
+    threads: they never keep the process alive. A child of `fork` starts
+    over with new sets.
+  - Where `psmsgr_waitset_open` returns `NOTSUP` (Linux < 5.16,
+    qemu-user), the binding remembers it and runs each `wait_async` as
+    `wait` on a daemon thread of its own.
+  - Arguments, result and exceptions are `wait`'s: an event's status other
+    than `OK` raises what `wait` raises for that code. `None` (or
+    `math.inf`) waits indefinitely and `0` polls once, synchronously. A
+    positive timeout is a timer on the loop (`call_later`), not rounded to
+    milliseconds; asyncio may run it up to the clock's resolution early.
+    In the fallback the timeout is `wait`'s.
+  - Cancelling the task, also through `asyncio.timeout` or the end of
+    `asyncio.run`, removes the reader from its set; an event that raced
+    the cancellation is dropped. In the fallback, the `CancelledError`
+    comes once the thread has left `wait`, within 100 ms.
+  - Until the wait ends the set owns the reader: every other call raises
+    `RuntimeError`, except `close()`, from any thread. It removes the
+    reader from the set, closes it, and the wait raises `ValueError`
+    (unless the event came first: then it is the result). In the fallback
+    it behaves as during `wait`.
+  - `remove` blocks while the set's thread scans (attaching channels), so
+    a cancellation or `close()` can block the loop for that long.
+  - A wait whose loop was closed drops its result. The reader is free
+    once the event comes, or the coroutine is closed.
 
 ```python
 from ps_msgr import StateWriter, StateReader, Snapshot, StateInfo, now_ns, unlink
@@ -118,6 +153,8 @@ class StateReader:                        # context manager
     def peek(self) -> StateInfo | None: ...                   # no copy, no syscall
     def wait(self, last_generation: int = 0,
              timeout: float | None = None) -> bool: ...       # False on timeout
+    async def wait_async(self, last_generation: int = 0,
+                         timeout: float | None = None) -> bool: ...  # asyncio
     def writer_alive(self) -> bool: ...
     def describe(self) -> ChannelDesc | None: ...
     @property

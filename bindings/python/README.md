@@ -30,7 +30,8 @@ export PSMSGR_LIBRARY=$PWD/build/release/libpsmsgr.so.1
 ```
 
 The import fails with an `ImportError` if the library is missing or its
-major version differs, or its minor version is older than the binding needs.
+major version differs, or its minor version is older than the binding needs
+(1.1).
 
 ## Usage
 
@@ -85,6 +86,11 @@ that tells a stale writer from a dead one, and Ctrl-C.
   `info.age_ns` is the value's age on `CLOCK_MONOTONIC`.
 - `wait()` releases the GIL while it blocks. Ctrl-C raises
   `KeyboardInterrupt` as usual.
+- `await r.wait_async(seen, timeout=0.5)` is `wait()` for `asyncio`. One
+  daemon thread waits for up to 127 readers (on kernels before 5.16, a
+  thread per wait instead), so many readers need no thread each.
+  Cancelling the task stops the wait; until it ends, `close()` is the only
+  other call allowed on the reader.
 - Channels live in `/dev/shm` unless `directory=` or `$PSMSGR_DIR` says
   otherwise.
 - Errors raise `PsMsgrError` (an `OSError`) or one of its subclasses; `code`

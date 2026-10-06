@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-"""ctypes declarations for libpsmsgr.so.1 (include/psmsgr/psmsgr.h, state.h)."""
+"""ctypes declarations for libpsmsgr.so.1 (include/psmsgr/psmsgr.h, state.h,
+waitset.h)."""
 
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ from typing import Any
 
 SONAME = "libpsmsgr.so.1"
 VERSION_MAJOR = 1
-MIN_VERSION_MINOR = 0
+MIN_VERSION_MINOR = 1
 
 OK = 0
 E_INVAL = -1
@@ -44,6 +45,7 @@ STATE_DEFAULT_SLOTS = 3
 STATE_RECREATE = 1 << 0
 STATE_NO_NOTIFY = 1 << 1
 INFO_ATTACHED = 1 << 0
+WAITSET_MAX = 127
 
 
 class StateOptions(Structure):
@@ -77,6 +79,16 @@ class StateDesc(Structure):
     ]
 
 
+class WaitsetEvent(Structure):
+    _fields_ = [
+        ("token", c_uint64),
+        ("status", c_int32),
+        ("generation", c_uint32),
+        ("sys_errno", c_int32),
+        ("reserved", c_uint32),
+    ]
+
+
 class Writer(Structure):
     """Opaque psmsgr_state_writer."""
 
@@ -85,8 +97,13 @@ class Reader(Structure):
     """Opaque psmsgr_state_reader."""
 
 
+class Waitset(Structure):
+    """Opaque psmsgr_waitset."""
+
+
 WriterPtr = POINTER(Writer)
 ReaderPtr = POINTER(Reader)
+WaitsetPtr = POINTER(Waitset)
 
 
 def check_version(version: int, path: str) -> None:
@@ -126,7 +143,8 @@ def _fn(lib: CDLL, name: str, restype: Any, *argtypes: Any) -> Any:
 # Calls that only touch the mapping, or make a short syscall, keep the GIL:
 # releasing and reacquiring it costs more than the call, and with other busy
 # threads reacquiring can take a whole switch interval. Calls that block
-# (wait) or do file system work (open, unlink, writer_alive) release it.
+# (wait, and the waitset's add and remove, which wait for its scan) or do file
+# system work (open, unlink, writer_alive) release it.
 version = _fn(_fast, "psmsgr_version", c_uint32)
 check_version(version(), library_path)
 
@@ -167,6 +185,22 @@ state_describe_sized = _fn(
     _fast, "psmsgr_state_describe_sized", c_int, ReaderPtr, POINTER(StateDesc), c_uint32
 )
 state_unlink = _fn(_blocking, "psmsgr_state_unlink", c_int, c_char_p, c_char_p)
+
+waitset_open = _fn(_fast, "psmsgr_waitset_open", c_int, POINTER(WaitsetPtr))
+waitset_close = _fn(_fast, "psmsgr_waitset_close", None, WaitsetPtr)
+waitset_add = _fn(_blocking, "psmsgr_waitset_add", c_int, WaitsetPtr, ReaderPtr, c_uint32, c_uint64)
+waitset_remove = _fn(_blocking, "psmsgr_waitset_remove", c_int, WaitsetPtr, ReaderPtr)
+waitset_wait = _fn(
+    _blocking,
+    "psmsgr_waitset_wait",
+    c_int,
+    WaitsetPtr,
+    c_int32,
+    POINTER(WaitsetEvent),
+    c_uint32,
+    POINTER(c_uint32),
+)
+waitset_wake = _fn(_fast, "psmsgr_waitset_wake", None, WaitsetPtr)
 
 # Runs pending Python signal handlers; raises what a handler raised.
 check_signals = ctypes.pythonapi.PyErr_CheckSignals

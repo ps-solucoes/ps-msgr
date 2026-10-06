@@ -11,7 +11,6 @@ still keeps a thread blocked in `Wait`. One small PR per binding:
 
 - C#: `WaitAsync` returning a `Task`, completed by one waiting thread per
   process.
-- Python: an `asyncio` wait, completed with `call_soon_threadsafe`.
 - Go: a wait that a `select` can use.
 
 Each one falls back to a thread per reader where `psmsgr_waitset_open`

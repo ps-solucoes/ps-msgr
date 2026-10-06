@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import math
 import operator
 import os
@@ -12,7 +14,7 @@ from dataclasses import dataclass
 from types import TracebackType
 from typing import Any, Final, Self, cast
 
-from . import _native
+from . import _native, _waitset
 from ._errors import PayloadTooLargeError, error
 
 StrPath = str | os.PathLike[str]
@@ -90,6 +92,20 @@ def _encode_dir(directory: StrPath | None) -> bytes | None:
 
 def _closed(obj: object) -> ValueError:
     return ValueError(f"operation on closed {type(obj).__name__}")
+
+
+def _busy(obj: object) -> RuntimeError:
+    return RuntimeError(f"{type(obj).__name__} is busy in a wait")
+
+
+def _timeout_ns(timeout: float | None) -> int | None:
+    """A wait's timeout in nanoseconds; None: no timeout."""
+    if timeout is None:
+        return None
+    t = float(timeout)
+    if not t >= 0:
+        raise ValueError(f"timeout must be non-negative or None, not {timeout!r}")
+    return None if t == math.inf else int(min(t * 1e9, _TIMEOUT_NS_MAX))
 
 
 def unlink(name: str, *, directory: StrPath | None = None) -> bool:
@@ -231,6 +247,7 @@ class StateReader:
         "_pending",
         "_recheck",
         "_users",
+        "_waiter",
     )
 
     _close_fn = _native.state_reader_close
@@ -242,6 +259,8 @@ class StateReader:
         # Calls in progress that release the GIL (wait, writer_alive): close()
         # leaves the handle open for the last of them to close.
         self._users = 0
+        # The wait_async in progress, if any: it owns the handle.
+        self._waiter: _AsyncWait | None = None
         h = _native.ReaderPtr()
         rc = _native.state_reader_open(_encode_name(name), _encode_dir(directory), byref(h))
         if rc != _native.OK:
@@ -264,6 +283,8 @@ class StateReader:
         h = self._h
         if h is None:
             raise _closed(self)
+        if self._waiter is not None:
+            raise _busy(self)
         return h
 
     def _enter(self) -> Any:
@@ -271,8 +292,15 @@ class StateReader:
             h = self._h
             if h is None:
                 raise _closed(self)
+            if self._waiter is not None:
+                raise _busy(self)
             self._users += 1
             return h
+
+    def _end_async(self, waiter: _AsyncWait) -> None:
+        with self._lock:
+            if self._waiter is waiter:
+                self._waiter = None
 
     def _leave(self, h: Any) -> None:
         with self._lock:
@@ -378,35 +406,74 @@ class StateReader:
         resumes with the remaining time (PEP 475). A ``close()`` from
         another thread makes it raise ``ValueError`` within 100 ms."""
         last = _u32("last_generation", last_generation)
-        deadline = None
-        if timeout is not None:
-            t = float(timeout)
-            if not t >= 0:
-                raise ValueError(f"timeout must be non-negative or None, not {timeout!r}")
-            if t != math.inf:
-                deadline = time.monotonic_ns() + int(min(t * 1e9, _TIMEOUT_NS_MAX))
+        t = _timeout_ns(timeout)
+        deadline = None if t is None else time.monotonic_ns() + t
         h = self._enter()
         try:
-            while True:
-                if self._h is None:
-                    raise _closed(self)
-                if deadline is None:
-                    ms = _WAIT_SLICE_MS
-                else:
-                    remaining = deadline - time.monotonic_ns()
-                    ms = min(-(-remaining // 1_000_000), _WAIT_SLICE_MS) if remaining > 0 else 0
-                rc = _native.state_wait(h, last, ms)
-                if rc == _native.OK:
-                    return True
-                if rc == _native.E_TIMEOUT:
-                    if deadline is not None and (ms == 0 or time.monotonic_ns() >= deadline):
-                        return False
-                elif rc == _native.E_INTR:
-                    _native.check_signals()
-                else:
-                    raise error(rc, self._name)
+            return self._wait(h, last, deadline)
         finally:
             self._leave(h)
+
+    def _wait(
+        self, h: Any, last: int, deadline: int | None, waiter: _AsyncWait | None = None
+    ) -> bool:
+        while True:
+            if self._h is None:
+                raise _closed(self)
+            if waiter is not None and waiter.stopped:
+                return False
+            if deadline is None:
+                ms = _WAIT_SLICE_MS
+            else:
+                remaining = deadline - time.monotonic_ns()
+                ms = min(-(-remaining // 1_000_000), _WAIT_SLICE_MS) if remaining > 0 else 0
+            rc = _native.state_wait(h, last, ms)
+            if rc == _native.OK:
+                return True
+            if rc == _native.E_TIMEOUT:
+                if deadline is not None and (ms == 0 or time.monotonic_ns() >= deadline):
+                    return False
+            elif rc == _native.E_INTR:
+                _native.check_signals()
+            else:
+                raise error(rc, self._name)
+
+    async def wait_async(self, last_generation: int = 0, timeout: float | None = None) -> bool:
+        """``wait`` for asyncio, without a blocked thread per reader: one
+        thread waits for up to 127 readers (where the kernel lacks
+        ``futex_waitv``, a thread per wait instead). Same arguments and
+        result. Cancelling the task takes the reader out of the wait. Until
+        the wait ends, ``close()`` is the only other call allowed on the
+        reader (others raise ``RuntimeError``); it makes the wait raise
+        ``ValueError``."""
+        last = _u32("last_generation", last_generation)
+        t = _timeout_ns(timeout)
+        if t == 0:
+            return self.wait(last, 0)
+        waiter = _AsyncWait(self, asyncio.get_running_loop())
+        # Under the lock, so that a close() from another thread finds the
+        # registration complete.
+        with self._lock:
+            h = self._h
+            if h is None:
+                raise _closed(self)
+            if self._waiter is not None or self._users:
+                raise _busy(self)
+            waiter.reg = _waitset.register(h, last, waiter.event)
+            if waiter.reg is None:
+                self._users += 1  # the thread fallback: a close() leaves the handle to it
+            self._waiter = waiter
+        if waiter.reg is None:
+            return await waiter.in_thread(h, last, t)
+        timer = None if t is None else waiter.loop.call_later(t / 1e9, waiter.timeout)
+        try:
+            return await waiter.future
+        except BaseException:  # cancelled, or the coroutine was closed
+            waiter.remove()
+            raise
+        finally:
+            if timer is not None:
+                timer.cancel()
 
     def writer_alive(self) -> bool:
         """Whether a writer holds the channel now. Makes syscalls; also
@@ -441,12 +508,17 @@ class StateReader:
 
     def close(self) -> None:
         """Closes the reader. Another thread may call it during ``wait`` or
-        ``writer_alive``; the handle then closes when that call returns."""
+        ``writer_alive``; the handle then closes when that call returns.
+        During ``wait_async`` it takes the reader out of the waitset first,
+        which can block briefly."""
         with self._lock:
             h, self._h = self._h, None
             deferred = self._users != 0
+            waiter = self._waiter
         if h is not None:
             self._buf = None
+            if waiter is not None:
+                waiter.close()
             if not deferred:
                 self._close_fn(h)
 
@@ -472,3 +544,92 @@ class StateReader:
 
     def __repr__(self) -> str:
         return f"<StateReader {self._name!r}{' closed' if self._h is None else ''}>"
+
+
+class _AsyncWait:
+    """A wait_async in progress: completes ``future`` once, on its loop."""
+
+    __slots__ = ("future", "loop", "reader", "reg", "stopped")
+
+    def __init__(self, reader: StateReader, loop: asyncio.AbstractEventLoop) -> None:
+        self.reader = reader
+        self.loop = loop
+        self.future: asyncio.Future[bool] = loop.create_future()
+        self.reg: _waitset.Registration | None = None
+        self.stopped = False  # the thread fallback: cancelled
+
+    def _post(self, result: bool | BaseException) -> None:
+        with contextlib.suppress(RuntimeError):  # the loop is closed: nobody awaits it
+            self.loop.call_soon_threadsafe(self._complete, result)
+
+    def _complete(self, result: bool | BaseException) -> None:
+        if self.future.done():
+            return
+        if isinstance(result, BaseException):
+            self.future.set_exception(result)
+        else:
+            self.future.set_result(result)
+
+    def event(self, status: int, generation: int, sys_errno: int) -> None:
+        """The waitset reported the reader (on the set's thread)."""
+        self.reader._end_async(self)
+        if status == _native.OK:
+            self._post(True)
+        else:
+            self._post(error(status, self.reader._name, errno=sys_errno))
+
+    def remove(self) -> bool:
+        """Takes the reader out of the set; True if no event will come."""
+        assert self.reg is not None
+        try:
+            return self.reg.remove()
+        finally:
+            self.reader._end_async(self)
+
+    def timeout(self) -> None:
+        if self.remove():
+            self._complete(False)
+        # else the event is on its way, and is the answer
+
+    def close(self) -> None:
+        """The reader is being closed, from any thread. The thread fallback
+        notices it before its next slice."""
+        if self.reg is not None and self.remove():
+            self._post(_closed(self.reader))
+
+    async def in_thread(self, h: Any, last: int, timeout_ns: int | None) -> bool:
+        """The fallback without waitsets: ``wait`` on a daemon thread."""
+        r = self.reader
+        deadline = None if timeout_ns is None else time.monotonic_ns() + timeout_ns
+
+        def run() -> None:
+            result: bool | BaseException
+            try:
+                result = r._wait(h, last, deadline, self)
+            except BaseException as e:
+                result = e
+            finally:
+                r._end_async(self)
+                r._leave(h)
+            self._post(result)
+
+        try:
+            threading.Thread(target=run, name="ps_msgr wait", daemon=True).start()
+        except BaseException:
+            r._end_async(self)
+            r._leave(h)
+            raise
+        try:
+            return await asyncio.shield(self.future)
+        except asyncio.CancelledError:
+            # The reader is the caller's again once the thread has left the
+            # wait, within one slice (100 ms): wait for that, then cancel.
+            self.stopped = True
+            while not self.future.done():
+                with contextlib.suppress(asyncio.CancelledError):
+                    await asyncio.shield(self.future)
+            self.future.exception()  # retrieved: the result no longer matters
+            raise
+        except BaseException:  # the coroutine was closed: the thread ends alone
+            self.stopped = True
+            raise
