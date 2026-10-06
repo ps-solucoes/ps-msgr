@@ -18,6 +18,10 @@ as described in [`spec/README.md`](spec/README.md).
 - `ps_msgr`: `StateReader.wait_async`, an `asyncio` wait on waitsets (one
   daemon thread per 127 readers, a thread per wait where they are not
   supported). The binding now needs `libpsmsgr` 1.1.
+- `psmsgr` (Go): `Reader.WaitChan`, a `Wait` for `select` that delivers
+  its result on a channel. The waits share waitsets, one goroutine per
+  127 readers, with a goroutine per wait where `futex_waitv` is missing.
+  The binding now needs `libpsmsgr` 1.1.
 - `release` workflow: a `v*` tag creates the GitHub release, with the
   `.deb` packages, the `.nupkg` and the `.whl` attached.
 

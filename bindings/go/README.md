@@ -111,6 +111,33 @@ for {
 - No value yet is not an error: the reads return `ok == false`.
 - `Wait` takes a `context.Context`, and `psmsgr.NoTimeout` waits until a
   change or the end of the context.
+- `WaitChan` is the same wait for a `select`: it returns at once, and its
+  channel delivers one `WaitResult` (`Changed`, the `Generation` to wait
+  from next, or `Err`). Until then the reader belongs to the wait: cancel
+  the context (then receive) or `Close` the reader to take it back. The
+  waits share one goroutine per 127 readers (a libpsmsgr waitset), which
+  ends after 10 s without waits; without `futex_waitv` (Linux < 5.16,
+  qemu-user) each wait gets a goroutine of its own.
+
+  ```go
+  var ch <-chan psmsgr.WaitResult // the wait in progress, if any
+  for {
+      if ch == nil {
+          ch = r.WaitChan(ctx, seen, psmsgr.NoTimeout)
+      }
+      select {
+      case res := <-ch:
+          ch = nil // the reader is ours again
+          if res.Err != nil {
+              return res.Err
+          }
+          seen = res.Generation // then read
+      case cmd := <-commands:
+          handle(cmd) // the wait goes on: don't use r here
+      }
+  }
+  ```
+
 - Channels live in `/dev/shm` unless `WriterOptions.Dir` (or the `dir`
   argument) or `$PSMSGR_DIR` says otherwise.
 - Errors are `*psmsgr.Error`s: `Code` is the library's result code, `Errno`

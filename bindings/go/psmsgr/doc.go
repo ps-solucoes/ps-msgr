@@ -29,10 +29,14 @@
 // errors.Is(err, fs.ErrNotExist) works on system errors. [ErrBusy] is
 // transient: retry.
 //
+// [Reader.WaitChan] is the wait for a select: a channel delivers its
+// result. The waits share libpsmsgr waitsets, one goroutine per 127
+// readers.
+//
 // Like the C handles, a Writer or Reader is not safe for concurrent use,
 // with one exception: another goroutine may Close a Reader during
-// [Reader.Wait] or [Reader.WriterAlive]. A handle that is garbage collected
-// without Close is closed then.
+// [Reader.Wait], [Reader.WriterAlive] or [Reader.WaitChan]. A handle that
+// is garbage collected without Close is closed then.
 //
 // The interface is specified in spec/bindings.md of the ps-msgr repository.
 package psmsgr
