@@ -9,8 +9,6 @@ The C library has waitsets since 1.1 (`<psmsgr/waitset.h>`): one thread
 waits for many readers. The bindings don't use them yet, so an async worker
 still keeps a thread blocked in `Wait`. One small PR per binding:
 
-- C#: `WaitAsync` returning a `Task`, completed by one waiting thread per
-  process.
 - Python: an `asyncio` wait, completed with `call_soon_threadsafe`.
 - Go: a wait that a `select` can use.
 

@@ -17,6 +17,9 @@ as described in [`spec/README.md`](spec/README.md).
   5.16, qemu-user). The library still creates no threads.
 - `release` workflow: a `v*` tag creates the GitHub release, with the
   `.deb` packages, the `.nupkg` and the `.whl` attached.
+- `PsMsgr`: `StateReader.WaitAsync`, completed by one background thread per
+  waitset of 127 readers instead of a blocked thread per reader (a thread
+  per wait without `futex_waitv`). The binding now needs `libpsmsgr` 1.1.
 
 ## [1.0.0] - 2026-09-25
 

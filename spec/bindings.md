@@ -205,8 +205,8 @@ Rules that keep it that way:
 - P/Invoke uses `[DllImport("libpsmsgr.so.1")]` with the versioned name
   hard-coded, and
   **blittable signatures only**: raw pointers, integers, and `byte*` for
-  strings. The three structs are mirrored with `[StructLayout(Sequential)]`,
-  and the tests compare their sizes and offsets, and every constant, with
+  strings. The three structs of `state.h` and `psmsgr_waitset_event` are
+  mirrored with `[StructLayout(Sequential)]`, and the tests compare their sizes and offsets, and every constant, with
   `tests/interop_helper layout`. Options are set up with
   `psmsgr_state_options_init_sized(&opt, sizeof(opt))`, and `Describe` calls
   `psmsgr_state_describe_sized(r, &desc, sizeof(desc))`.
@@ -228,7 +228,8 @@ Rules that keep it that way:
     before its next slice.
   - Calls that can return `PSMSGR_E_SYS` according to the header
     (`writer_open`, `reader_open`, `read`, `peek`, `wait`, `writer_alive`,
-    `describe`, `unlink`) use `SetLastError = true`. `errno` is read with
+    `describe`, `unlink`, `waitset_open`, `waitset_wait`) use
+    `SetLastError = true`. `errno` is read with
     `Marshal.GetLastWin32Error()`, which works on Unix and in AOT, and its
     text comes from libc's XSI `strerror_r` (`__xpg_strerror_r`).
 - `PSMSGR_LIBRARY` override: `NativeLibrary` isn't available on
@@ -290,6 +291,7 @@ public sealed class StateReader : IDisposable
     public byte[]? Read(out StateInfo info);                          // allocating convenience; null: no data
     public bool TryPeek(out StateInfo info);                          // no copy, no syscall
     public bool Wait(uint lastGeneration, TimeSpan timeout, CancellationToken cancellationToken = default);
+    public Task<bool> WaitAsync(uint lastGeneration, TimeSpan timeout, CancellationToken cancellationToken = default);
     public bool IsWriterAlive { get; }
     public ChannelDesc? Describe();                                   // null: not attached
     public void Dispose();
@@ -332,6 +334,40 @@ public enum PsMsgrError { Inval = -1, Sys = -2, NoData = -3, TooSmall = -4, TooB
   was disposed (`ObjectDisposedException`).
   `PSMSGR_E_INTR` is expected, not only from the application: the runtime
   signals threads too. `Wait` retries with the remaining time.
+- `WaitAsync` is `Wait` without a blocked thread per reader, on waitsets
+  (c-api.md):
+  - It first checks once on the calling thread, like `Wait` with
+    `TimeSpan.Zero`: a changed value or a zero timeout gives a completed
+    task, an error a faulted one. Otherwise it registers the reader with a
+    waitset, and the event completes the task: `true`, or a fault with the
+    `PsMsgrException` that `Wait` throws for the event's status (`NotSup`,
+    `Format`, `Sys` with its `errno`).
+  - The timeout is validated, rounded and saturated as for `Wait`; it ends
+    with `false`. A cancellation removes the registration and cancels the
+    task at once (a token canceled before the call: a canceled task, no
+    check). A `Dispose` from another thread removes it, which may block
+    while the waiting thread scans the set, then closes the reader; the
+    task faults with `ObjectDisposedException`. If the event raced them
+    (`remove` returns `NODATA`), the event is the result.
+  - A negative timeout, a disposed reader, or a reader already in a
+    `WaitAsync`, throw at once instead of faulting the task.
+  - Until the task completes, the set owns the reader: every other call on
+    it except `Dispose` throws `InvalidOperationException`. The pending
+    wait holds a reference on the native handle and keeps the reader
+    reachable.
+  - One background thread per waitset (`IsBackground`, it never keeps the
+    process alive) calls `psmsgr_waitset_wait` until the earliest deadline
+    of its readers, completes the tasks with
+    `RunContinuationsAsynchronously` so that no continuation runs on it,
+    and removes the readers whose timeout passed. A set holds
+    `PSMSGR_WAITSET_MAX` (127) readers; more concurrent waits open more
+    sets, each with its thread. The first `WaitAsync` that registers opens
+    the first set and starts its thread; sets and threads stay for the life
+    of the process, blocked in the kernel while idle.
+  - Where `psmsgr_waitset_open` returns `NOTSUP` (Linux < 5.16,
+    qemu-user), each `WaitAsync` runs `Wait` on a background thread of its
+    own instead, so a cancellation or `Dispose` takes effect within
+    100 ms. The tests run both ways, through an internal switch.
 - `WriteScope` holds only an id; the writer holds the state. So copies of a
   scope, including the read-only variable of a `using`, stay coherent: a
   commit through one ends them all, and `Dispose` after a commit does

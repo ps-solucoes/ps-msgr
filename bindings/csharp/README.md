@@ -25,7 +25,7 @@ export PSMSGR_LIBRARY=$PWD/build/release/libpsmsgr.so.1
 ```
 
 If the library is missing, or its major version differs, or its minor
-version is older than the binding needs, the first call throws a
+version is older than the binding needs (1.1), the first call throws a
 `TypeInitializationException` whose inner exception says what is wrong.
 
 ## Usage
@@ -88,6 +88,12 @@ publishing for the BeagleBone Black.
   `info.Age` is the value's age on `CLOCK_MONOTONIC` (`Clock.NowNs()`).
 - `Wait` takes a `CancellationToken`; `Timeout.InfiniteTimeSpan` waits
   indefinitely.
+- `await r.WaitAsync(seen, timeout, token)` waits the same way without
+  blocking a thread per reader: one background thread per 127 waiting
+  readers completes the tasks (libpsmsgr waitsets, Linux 5.16; older
+  kernels get a thread per wait). Until the task completes, the reader
+  belongs to it: other calls throw `InvalidOperationException`, except
+  `Dispose`, which ends the wait with `ObjectDisposedException`.
 - Channels live in `/dev/shm` unless `StateOptions.Directory` (or the
   `directory` argument) or `$PSMSGR_DIR` says otherwise.
 - Errors throw `PsMsgrException` (an `IOException`); `Code` is the library's

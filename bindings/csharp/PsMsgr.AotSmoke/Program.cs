@@ -3,6 +3,7 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using PsMsgr;
 
 // Calls every public API of PsMsgr, so that the Native AOT publish analyzes all of it.
@@ -83,6 +84,22 @@ static void Run(string dir)
         ChannelDesc? desc = reader.Describe();
         Check(desc is { Capacity: 24, SlotCount: 2, PayloadType: 0x0001_0001, Notify: true }
             && desc.Value.ToString().Contains("Capacity"), "Describe");
+
+        Task<bool> pending = reader.WaitAsync(gen, TimeSpan.FromSeconds(5));
+        gen = writer.Publish(status);
+        Check(pending.GetAwaiter().GetResult(), "WaitAsync");
+        Check(!reader.WaitAsync(gen, TimeSpan.FromMilliseconds(10)).GetAwaiter().GetResult(), "WaitAsync timeout");
+        using (var asyncCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50)))
+        {
+            try
+            {
+                reader.WaitAsync(gen, Timeout.InfiniteTimeSpan, asyncCts.Token).GetAwaiter().GetResult();
+                Check(false, "WaitAsync cancellation");
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
 
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
         try
