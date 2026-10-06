@@ -125,10 +125,15 @@ def register(h: Any, last_generation: int, callback: Callback) -> Registration |
             if rc != _native.OK:
                 raise error(rc)
             s = _Set(ws)
+            thread = threading.Thread(target=s.run, name="ps_msgr waitset", daemon=True)
+            try:
+                thread.start()
+            except BaseException:
+                _native.waitset_close(ws)
+                raise
+            # Only now: a set without its thread would never deliver.
+            s.thread = thread
             _sets.append(s)
-        if s.thread is None:
-            s.thread = threading.Thread(target=s.run, name="ps_msgr waitset", daemon=True)
-            s.thread.start()
         reg = Registration(s, h, next(_tokens), callback)
         # Before the add: the event can come before the add returns.
         s.pending[reg.token] = reg

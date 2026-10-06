@@ -443,3 +443,223 @@ def test_fork_starts_over(channel: tuple[StateWriter, StateReader], tmp_path: Pa
             os._exit(0 if ok else 1)
     _, status = os.waitpid(pid, 0)
     assert os.waitstatus_to_exitcode(status) == 0
+
+
+def test_deadline_checks_once(mode: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # A timeout that ends before the set's thread has looked at the reader
+    # still checks it once, as wait() does.
+    if mode == "waitset":  # the set's thread never sees the reader
+        monkeypatch.setattr(_native, "waitset_add", lambda ws, h, last, token: _native.OK)
+        monkeypatch.setattr(_native, "waitset_remove", lambda ws, h: _native.OK)
+
+    async def main() -> None:
+        with (
+            StateWriter(CHAN, 8, directory=tmp_path) as w,
+            StateReader(CHAN, directory=tmp_path) as r,
+        ):
+            old = w.publish(b"a")
+            w.publish(b"b")
+            assert r.wait(old, 0.0005) is True
+            assert await r.wait_async(old, 0.0005) is True
+            gen = r.peek().generation
+            assert await r.wait_async(gen, 0.0005) is False
+            assert registered() == 0
+        with (
+            StateWriter("nonotify", 8, notify=False, directory=tmp_path) as w,
+            StateReader("nonotify", directory=tmp_path) as r,
+        ):
+            w.publish(b"a")
+            with pytest.raises(PsMsgrError) as e:
+                await r.wait_async(0, 0.0005)
+            assert e.value.code == ErrorCode.NOTSUP
+
+    run(main)
+
+
+def test_thread_start_fails(
+    channel: tuple[StateWriter, StateReader], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if not _have_waitsets():
+        pytest.skip("psmsgr_waitset_open returns NOTSUP here (no futex_waitv)")
+    w, r = channel
+    closed = []
+    close = _native.waitset_close
+
+    class NoThread(threading.Thread):
+        def start(self) -> None:
+            raise RuntimeError("can't start new thread")
+
+    def recording_close(ws: object) -> None:
+        closed.append(ws)
+        close(ws)
+
+    monkeypatch.setattr(_waitset, "_sets", [])
+    monkeypatch.setattr(_native, "waitset_close", recording_close)
+    monkeypatch.setattr(_waitset.threading, "Thread", NoThread)
+
+    async def main() -> None:
+        gen = w.publish(b"a")
+        with pytest.raises(RuntimeError, match="can't start"):
+            await r.wait_async(gen, 10)
+        assert _waitset._sets == [] and len(closed) == 1
+        monkeypatch.undo()
+        monkeypatch.setattr(_waitset, "_sets", [])
+        task = asyncio.create_task(r.wait_async(gen, 10))
+        await asyncio.sleep(0.05)
+        w.publish(b"b")
+        assert await task is True
+
+    run(main)
+
+
+@pytest.fixture
+def held_events(monkeypatch: pytest.MonkeyPatch) -> Iterator[threading.Event]:
+    """Holds each event the sets' threads report until the event is set: the
+    reader is then out of the set, and remove() gets NODATA."""
+    if not _have_waitsets():
+        pytest.skip("psmsgr_waitset_open returns NOTSUP here (no futex_waitv)")
+    gate = threading.Event()
+    deliver = _waitset._Set._deliver
+
+    def held(s: Any, events: Any, n: int) -> None:
+        gate.wait(10)
+        deliver(s, events, n)
+
+    monkeypatch.setattr(_waitset, "_sets", [])
+    monkeypatch.setattr(_waitset._Set, "_deliver", held)
+    yield gate
+    gate.set()
+
+
+def removals(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    results: list[int] = []
+    remove = _native.waitset_remove
+
+    def recording_remove(ws: object, h: object) -> int:
+        rc: int = remove(ws, h)
+        results.append(rc)
+        return rc
+
+    monkeypatch.setattr(_native, "waitset_remove", recording_remove)
+    return results
+
+
+def test_event_wins_over_timeout(
+    held_events: threading.Event,
+    channel: tuple[StateWriter, StateReader],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    w, r = channel
+    rcs = removals(monkeypatch)
+
+    async def main() -> None:
+        gen = w.publish(b"a")
+        task = asyncio.create_task(r.wait_async(gen, 0.1))
+        await asyncio.sleep(0.02)
+        w.publish(b"b")
+        await asyncio.sleep(0.2)  # the timer fired while the event is held
+        assert rcs == [_native.E_NODATA]
+        assert not task.done()
+        with pytest.raises(RuntimeError, match="busy"):
+            r.peek()  # the event still owns the reader
+        held_events.set()
+        assert await task is True
+
+    run(main)
+
+
+def test_event_wins_over_close(
+    held_events: threading.Event, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rcs = removals(monkeypatch)
+
+    async def main() -> None:
+        with StateWriter(CHAN, 8, directory=tmp_path) as w:
+            gen = w.publish(b"a")
+            r = StateReader(CHAN, directory=tmp_path)
+            task = asyncio.create_task(r.wait_async(gen))
+            await asyncio.sleep(0.02)
+            w.publish(b"b")
+            await asyncio.sleep(0.05)
+            r.close()
+            assert rcs == [_native.E_NODATA] and r.closed
+            held_events.set()
+            assert await task is True
+
+    run(main)
+
+
+def test_cancel_drops_raced_event(
+    held_events: threading.Event,
+    channel: tuple[StateWriter, StateReader],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    w, r = channel
+    rcs = removals(monkeypatch)
+
+    async def main() -> None:
+        gen = w.publish(b"a")
+        task = asyncio.create_task(r.wait_async(gen))
+        await asyncio.sleep(0.02)
+        old = r._waiter.reg  # type: ignore[union-attr]
+        assert old is not None
+        new = w.publish(b"b")
+        await asyncio.sleep(0.05)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert rcs == [_native.E_NODATA]
+        assert r.peek().generation == new  # the reader is the caller's again
+
+        # Waits again at once: the stale registration's remove must not take
+        # the reader out of the new one.
+        again = asyncio.create_task(r.wait_async(new))
+        await asyncio.sleep(0.02)
+        assert old.remove() is False
+        assert rcs == [_native.E_NODATA]
+        held_events.set()  # the raced event goes to the cancelled wait
+        await asyncio.sleep(0.05)
+        assert not again.done()
+        assert registered() == 1
+        w.publish(b"c")
+        assert await again is True
+
+    run(main)
+
+
+def test_set_failure_fails_its_waits(
+    channel: tuple[StateWriter, StateReader], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if not _have_waitsets():
+        pytest.skip("psmsgr_waitset_open returns NOTSUP here (no futex_waitv)")
+    w, r = channel
+    wait = _native.waitset_wait
+    broken = threading.Event()
+    broken.set()
+
+    def failing_wait(*args: Any) -> int:
+        if broken.is_set():
+            time.sleep(0.01)
+            return _native.E_INVAL
+        rc: int = wait(*args)
+        return rc
+
+    monkeypatch.setattr(_waitset, "_sets", [])
+    monkeypatch.setattr(_native, "waitset_wait", failing_wait)
+
+    async def main() -> None:
+        gen = w.publish(b"a")
+        try:
+            with pytest.raises(PsMsgrError) as e:
+                await r.wait_async(gen, 10)
+            assert e.value.code == ErrorCode.INVAL
+            assert registered() == 0
+            assert r.peek().generation == gen  # the reader is the caller's again
+        finally:
+            broken.clear()
+        task = asyncio.create_task(r.wait_async(gen, 10))
+        await asyncio.sleep(0.2)  # the set's thread is back in waitset_wait
+        w.publish(b"b")
+        assert await task is True
+
+    run(main)

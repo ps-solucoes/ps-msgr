@@ -90,7 +90,9 @@ that tells a stale writer from a dead one, and Ctrl-C.
   daemon thread waits for up to 127 readers (on kernels before 5.16, a
   thread per wait instead), so many readers need no thread each.
   Cancelling the task stops the wait; until it ends, `close()` is the only
-  other call allowed on the reader.
+  other call allowed on the reader. Starting, cancelling or closing a wait
+  can block the loop while that thread scans its readers (attaching
+  channels).
 - Channels live in `/dev/shm` unless `directory=` or `$PSMSGR_DIR` says
   otherwise.
 - Errors raise `PsMsgrError` (an `OSError`) or one of its subclasses; `code`

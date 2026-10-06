@@ -297,10 +297,18 @@ class StateReader:
             self._users += 1
             return h
 
-    def _end_async(self, waiter: _AsyncWait) -> None:
+    def _end_async(self, waiter: _AsyncWait, enter: bool = False) -> Any:
+        """Ends ``waiter``'s ownership of the reader. With ``enter``, also
+        starts a call as ``_enter`` does and returns the handle (None if
+        closed); ``_leave`` ends that call."""
         with self._lock:
             if self._waiter is waiter:
                 self._waiter = None
+            h = self._h
+            if not enter or h is None:
+                return None
+            self._users += 1
+            return h
 
     def _leave(self, h: Any) -> None:
         with self._lock:
@@ -450,7 +458,7 @@ class StateReader:
         t = _timeout_ns(timeout)
         if t == 0:
             return self.wait(last, 0)
-        waiter = _AsyncWait(self, asyncio.get_running_loop())
+        waiter = _AsyncWait(self, asyncio.get_running_loop(), last)
         # Under the lock, so that a close() from another thread finds the
         # registration complete.
         with self._lock:
@@ -549,11 +557,12 @@ class StateReader:
 class _AsyncWait:
     """A wait_async in progress: completes ``future`` once, on its loop."""
 
-    __slots__ = ("future", "loop", "reader", "reg", "stopped")
+    __slots__ = ("future", "last", "loop", "reader", "reg", "stopped")
 
-    def __init__(self, reader: StateReader, loop: asyncio.AbstractEventLoop) -> None:
+    def __init__(self, reader: StateReader, loop: asyncio.AbstractEventLoop, last: int) -> None:
         self.reader = reader
         self.loop = loop
+        self.last = last
         self.future: asyncio.Future[bool] = loop.create_future()
         self.reg: _waitset.Registration | None = None
         self.stopped = False  # the thread fallback: cancelled
@@ -587,9 +596,31 @@ class _AsyncWait:
             self.reader._end_async(self)
 
     def timeout(self) -> None:
-        if self.remove():
-            self._complete(False)
-        # else the event is on its way, and is the answer
+        """The deadline. Only the set's thread checks the generation, and it
+        may not have yet: once the reader is out of the set, check it once
+        here, as ``wait`` does at its deadline."""
+        assert self.reg is not None
+        r = self.reader
+        try:
+            removed = self.reg.remove()
+        except BaseException as e:
+            r._end_async(self)
+            self._complete(e)
+            return
+        if not removed:
+            return  # the event is on its way: it is the answer, and frees the reader
+        h = r._end_async(self, enter=True)
+        if h is None:  # closed meanwhile; its remove() found the reader gone
+            self._complete(_closed(r))
+            return
+        result: bool | BaseException
+        try:
+            result = r._wait(h, self.last, 0)
+        except BaseException as e:
+            result = e
+        finally:
+            r._leave(h)
+        self._complete(result)
 
     def close(self) -> None:
         """The reader is being closed, from any thread. The thread fallback

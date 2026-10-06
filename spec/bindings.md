@@ -116,7 +116,12 @@ The rules that apply to all of them (Go differs where its section says so):
     `math.inf`) waits indefinitely and `0` polls once, synchronously. A
     positive timeout is a timer on the loop (`call_later`), not rounded to
     milliseconds; asyncio may run it up to the clock's resolution early.
-    In the fallback the timeout is `wait`'s.
+    At the timer, once the reader is out of the set, the binding checks
+    the generation once more (`psmsgr_state_wait` with 0 ms), as `wait`
+    does at its deadline: a timeout too short for the set's thread to scan
+    still returns `True` for a changed generation, or raises. An event
+    that came first is the result instead. In the fallback the timeout is
+    `wait`'s.
   - Cancelling the task, also through `asyncio.timeout` or the end of
     `asyncio.run`, removes the reader from its set; an event that raced
     the cancellation is dropped. In the fallback, the `CancelledError`
@@ -126,8 +131,13 @@ The rules that apply to all of them (Go differs where its section says so):
     reader from the set, closes it, and the wait raises `ValueError`
     (unless the event came first: then it is the result). In the fallback
     it behaves as during `wait`.
-  - `remove` blocks while the set's thread scans (attaching channels), so
-    a cancellation or `close()` can block the loop for that long.
+  - `psmsgr_waitset_add` and `psmsgr_waitset_remove` both block while the
+    set's thread scans (attaching channels), so starting, cancelling or
+    timing out a `wait_async`, or closing its reader, can block the loop
+    for that long. `wait_async` adds under the reader's lock: a `close()`
+    from another thread waits for the add.
+  - A set's thread is started before the set is listed: if it cannot
+    start, the set is closed and `wait_async` raises.
   - A wait whose loop was closed drops its result. The reader is free
     once the event comes, or the coroutine is closed.
 
