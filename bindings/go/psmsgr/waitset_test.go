@@ -303,6 +303,26 @@ func TestCloseStopsWaitChan(t *testing.T) {
 	})
 }
 
+// A set that delivers before WaitChan returns leaves no registration in
+// the reader for a later Close to cancel.
+func TestWaitChanDeliveredBeforeReturn(t *testing.T) {
+	c := newChannel(t)
+	w := c.writer(8, psmsgr.WriterOptions{})
+	r := c.reader()
+	gen := must[uint32](t)(w.Publish([]byte("a")))
+	defer psmsgr.DeliverBeforeWaiterStored()()
+	ch := r.WaitChan(context.Background(), 0, psmsgr.NoTimeout)
+	if !psmsgr.UsesWaitsets() {
+		t.Skip("no futex_waitv")
+	}
+	if g := changed(t, ch); g != gen {
+		t.Fatalf("generation %d, want %d", g, gen)
+	}
+	if psmsgr.HasWaiter(r) {
+		t.Fatal("the delivered wait is still registered in the reader")
+	}
+}
+
 func TestWaitChanNotSupportedWithoutNotify(t *testing.T) {
 	bothWays(t, func(t *testing.T) {
 		c := newChannel(t)

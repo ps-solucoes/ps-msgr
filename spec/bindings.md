@@ -557,10 +557,12 @@ var ErrClosed error
     readers each, and opened when no set has room: any number of readers
     can wait. Each set has a goroutine, locked to its OS thread, in
     `psmsgr_waitset_wait`; it starts with the set and, after 10 s without
-    readers, closes the set and ends. It waits with no timeout while the
+    readers, closes the set and ends. It waits with no timeout if the
     set has readers, so a timeout, `ctx` or `Close` that takes out the
     last one wakes it (`psmsgr_waitset_wake`) to start the 10 s; a remove
-    alone doesn't end the wait. Goroutines don't keep a Go program
+    alone doesn't end the wait. An add doesn't wake it: a wait that started
+    without readers ends at its 10 s, and finding readers then, the
+    goroutine waits again, with no timeout. Goroutines don't keep a Go program
     alive, so it needs no shutdown. The token is a counter, not a Go
     pointer.
   - Without `futex_waitv` (`psmsgr_waitset_open` returns `NOTSUP`: Linux <

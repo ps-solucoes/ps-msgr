@@ -92,10 +92,14 @@ func (r *Reader) WaitChan(ctx context.Context, lastGeneration uint32, timeout ti
 	case !registered: // no futex_waitv: a goroutine per wait
 		go func() { w.finish(r.waitGeneration(ctx, h, lastGeneration, timeout)) }()
 	default:
+		if f := afterRegister.Load(); f != nil {
+			(*f)(w)
+		}
 		// Either Close sees the waiter and cancels it, or this sees the Close.
+		// Unless the set has delivered already: then the reader is free.
 		r.mu.Lock()
 		closed := r.closed
-		if !closed {
+		if !closed && r.async {
 			r.waiter = w
 		}
 		r.mu.Unlock()
@@ -217,6 +221,9 @@ var (
 	// beforeWaitsetWait, if set, runs on a set's goroutine before each
 	// psmsgr_waitset_wait. For the tests.
 	beforeWaitsetWait atomic.Pointer[func()]
+	// afterRegister, if set, runs in WaitChan after a set took the wait.
+	// For the tests.
+	afterRegister atomic.Pointer[func(*asyncWait)]
 )
 
 func init() { waitsetIdle.Store(int64(10 * time.Second)) }

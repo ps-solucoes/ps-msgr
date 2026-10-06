@@ -67,3 +67,22 @@ func Waitsets() int {
 	defer sets.mu.Unlock()
 	return len(sets.list)
 }
+
+// DeliverBeforeWaiterStored makes WaitChan, after a set took the wait, wait
+// until the set has delivered its result, until restore.
+func DeliverBeforeWaiterStored() (restore func()) {
+	f := func(w *asyncWait) {
+		for deadline := time.Now().Add(5 * time.Second); len(w.ch) == 0 && time.Now().Before(deadline); {
+			time.Sleep(time.Millisecond)
+		}
+	}
+	afterRegister.Store(&f)
+	return func() { afterRegister.Store(nil) }
+}
+
+// HasWaiter reports whether r holds a WaitChan registration.
+func HasWaiter(r *Reader) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.waiter != nil
+}
