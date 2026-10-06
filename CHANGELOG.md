@@ -7,6 +7,11 @@ as described in [`spec/README.md`](spec/README.md).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-06
+
+Library 1.1.0; the bindings `ps_msgr` (Python) and `PsMsgr` (C#) 1.1.0, and
+the Go binding `bindings/go/v1.1.0`. All three need `libpsmsgr` 1.1.
+
 ### Added
 
 - `libpsmsgr` 1.1: waitsets (`<psmsgr/waitset.h>`, symbol version
@@ -17,16 +22,18 @@ as described in [`spec/README.md`](spec/README.md).
   5.16, qemu-user). The library still creates no threads.
 - `ps_msgr`: `StateReader.wait_async`, an `asyncio` wait on waitsets (one
   daemon thread per 127 readers, a thread per wait where they are not
-  supported). The binding now needs `libpsmsgr` 1.1.
+  supported).
+- `PsMsgr`: `StateReader.WaitAsync`, completed by one background thread per
+  waitset of 127 readers instead of a blocked thread per reader (a thread
+  per wait without `futex_waitv`).
 - `psmsgr` (Go): `Reader.WaitChan`, a `Wait` for `select` that delivers
   its result on a channel. The waits share waitsets, one goroutine per
   127 readers, with a goroutine per wait where `futex_waitv` is missing.
-  The binding now needs `libpsmsgr` 1.1.
+- `abi/`: `abidw` snapshots of the 1.1.0 public ABI for amd64 and armhf.
+  Against 1.0.0, `abidiff` reports only the six added `PSMSGR_1.1`
+  functions.
 - `release` workflow: a `v*` tag creates the GitHub release, with the
   `.deb` packages, the `.nupkg` and the `.whl` attached.
-- `PsMsgr`: `StateReader.WaitAsync`, completed by one background thread per
-  waitset of 127 readers instead of a blocked thread per reader (a thread
-  per wait without `futex_waitv`). The binding now needs `libpsmsgr` 1.1.
 
 ## [1.0.0] - 2026-09-25
 
