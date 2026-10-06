@@ -10,7 +10,8 @@ writer to many readers through a shared-memory file in `/dev/shm`:
 - Lock-free reads that never see a torn value.
 - No syscalls on the hot path.
 - Generation and timestamp without copying the payload (`peek`).
-- Optional blocking `wait`.
+- Optional blocking `wait`, also for many readers at once from one thread
+  (waitset, Linux 5.16).
 - Readers can start before the writer.
 
 Status: the C library with state channels, `psmsgr-dump`, `psmsgr-bench`,

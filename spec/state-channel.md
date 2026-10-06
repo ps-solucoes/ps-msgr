@@ -463,6 +463,50 @@ for (;;) {
 - `timeout`: < 0 means infinite, 0 means check once. Timeouts are measured on
   `CLOCK_MONOTONIC`.
 
+### 6.7 Waitset
+
+A waitset (c-api.md) waits for many readers with one `futex_waitv` call
+(Linux 5.16), which sleeps until any of up to 128 futexes is woken. Each
+registered reader keeps the per-reader rules of 6.6; the writer side and the
+file format are unchanged. Under the set's lock, `wait` loops:
+
+```c
+for (;;) {
+    k = atomic_load(&set->kick);                 // BEFORE the scan
+    for each registered reader r:
+        if (unattached && attach retry not due) continue;
+        if (orphan check due) identity_check(r); // 6.2, once per second for the set
+        step = one pass of the 6.6 loop:         // reattach, notify BEFORE the check, peek
+            changed or failed  -> report r, unregister it
+            unattached         -> retry the attach in 10 ms
+            unchanged          -> sleep on (&hdr->notify, n), shared futex
+    if (reported anything || wake pending) return OK;
+    if (deadline passed) return TIMEOUT;
+    unlock;
+    futex_waitv({ armed readers..., (&set->kick, k) private }, until min(deadline, next timer));
+    lock;                                        // woken, EAGAIN or ETIMEDOUT: scan again
+}
+```
+
+- Lost wake-ups are prevented as in 6.6: each reader's `notify` is loaded
+  before its generation check. `futex_waitv` returns `EAGAIN` if any of the
+  values changed by the time it sleeps.
+- `kick` is a private futex in every call. `add` and `remove` bump it while
+  `wait` is in the kernel, and `wake` always does. A bump after the load of
+  `k` makes `futex_waitv` return at once, so a reader added during a wait
+  is armed by the next scan.
+- Any wake-up scans every reader; the index `futex_waitv` returns is not
+  used. A publish is a few loads per reader to check.
+- The kernel may still hold an address in a removed reader's mapping.
+  `remove` therefore returns only once `wait` is out of `futex_waitv`, so
+  the caller can close the reader and unmap the file at once.
+- Timers: an unattached reader retries its attach every 10 ms, and the
+  orphan identity check runs at least once per second while any reader is
+  attached. With no timer due and no deadline, `wait` sleeps until woken.
+- `ENOSYS` or `EPERM` from a probe in `open` (an older kernel, a seccomp
+  filter, qemu-user) gives `PSMSGR_E_NOTSUP`. Callers then keep one thread
+  per reader in `wait`.
+
 ## 7. Unlink
 
 `unlink(name)` requires the writer lock, including the identity check from

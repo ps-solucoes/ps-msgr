@@ -16,7 +16,8 @@ cmake/                        toolchain file, package config, ABI check, Debian 
 abi/                          ABI snapshots (abidw) of each release
 include/psmsgr/psmsgr.h
 include/psmsgr/state.h
-src/                          implementation (state.c, futex/lock helpers, …)
+include/psmsgr/waitset.h
+src/                          implementation (state.c, waitset.c, futex/lock helpers, …)
 tools/psmsgr-dump.c
 tests/                        C unit + torture tests (CTest), interop_helper (layouts, C interop agent)
 bench/                        psmsgr-bench: on-target latency benchmark
@@ -100,7 +101,9 @@ the same image.
   `CMAKE_CROSSCOMPILING_EMULATOR` to `qemu-arm -L /usr/arm-linux-gnueabihf`,
   so `ctest` runs armhf tests unchanged. If qemu-user turns out to mishandle
   OFD locks or cross-process futexes, those tests are marked
-  `board-only` and run in the on-target validation instead.
+  `board-only` and run in the on-target validation instead. qemu-user (10.0)
+  does not implement `futex_waitv`, so the waitset tests skip there; the
+  x86-64, AArch64 and TSan runs cover them.
 - **On-target debugging:** `gdbserver` on the board, `gdb-multiarch` in the
   container.
 
@@ -130,7 +133,8 @@ the library get correct package dependencies.
 ## C library
 
 - CMake ≥ 3.25 (presets v6, workflow presets; trixie ships 3.31), C11, and
-  no dependencies beyond glibc. `_GNU_SOURCE` is set internally. The tests
+  no dependencies beyond glibc and the kernel headers (≥ 5.16, for
+  `struct futex_waitv`; trixie ships 6.12). `_GNU_SOURCE` is set internally. The tests
   also need cmocka ≥ 2.0; `-DPSMSGR_BUILD_TESTS=OFF` builds without them.
 - `CMAKE_EXPORT_COMPILE_COMMANDS` is on, for clangd.
 - Build outputs:
@@ -218,8 +222,10 @@ scratch directory, runs pytest against that, and then `ruff check` and
 
 `tests/interop_helper.c` is built with the C tests but is not a CTest test.
 `interop_helper layout` prints every size, offset and constant of the
-public headers, which the bindings compare with their mirrors, so that a C
-layout change fails the binding tests instead of corrupting data.
+public headers that the bindings mirror, and the bindings compare them, so
+that a C layout change fails the binding tests instead of corrupting data.
+The waitset's (`<psmsgr/waitset.h>`) join it with the first binding that
+uses it.
 Its other commands make it the C agent of the interop suite
 (`interop/README.md`).
 
@@ -307,6 +313,17 @@ Every test uses its own temporary directory as the channel `dir`, never
 - `wait`: wakes on publish, times out, returns 0-timeout immediately, wakes
   on retire and on unlink, returns `NOTSUP` on `NO_NOTIFY` channels, and
   returns `INTR` when a signal arrives without `SA_RESTART`.
+- Waitset (`tests/test_waitset.c`): argument checks, `TOOBIG` and `STATE`
+  on `add`; one-shot reports with token and generation, in registration
+  order and `cap` at a time; wakes on publish, on an `add` while blocked,
+  and on `wake` (sticky, and from another thread); `remove` while blocked,
+  then closing the reader at once; `STATE` for a second waiting thread;
+  timeouts and `INTR`; per-reader `NOTSUP` and `FORMAT`; follows a lazy
+  attach, a retire and an orphaned file; two readers of one channel woken
+  by one publish; and a race of `add`/`remove` against a waiting thread in
+  which every registration ends exactly once. In `test_state_hooks.c`, a
+  test hook makes `futex_waitv` fail with `ENOSYS` to check `NOTSUP` from
+  `open`.
 - `writer_alive` before open, during, after close, and after `SIGKILL`.
 - Lock identity: `unlink` racing a second writer's open never produces two
   writers (fault-injection hook between `open` and `F_OFD_SETLK`).

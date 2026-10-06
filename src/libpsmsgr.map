@@ -29,3 +29,13 @@ PSMSGR_1 {
     local:
         *;
 };
+
+PSMSGR_1.1 {
+    global:
+        psmsgr_waitset_add;
+        psmsgr_waitset_close;
+        psmsgr_waitset_open;
+        psmsgr_waitset_remove;
+        psmsgr_waitset_wait;
+        psmsgr_waitset_wake;
+} PSMSGR_1;

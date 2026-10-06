@@ -25,11 +25,8 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
-#define READ_RETRIES       64
-#define ATTACH_RETRIES     2
-#define WAIT_SLICE_NS      UINT64_C(1000000000) /* orphan check at least once per second */
-#define UNATTACHED_POLL_NS UINT64_C(10000000)   /* unattached wait: retry attach every 10 ms */
-#define NS_PER_MS          UINT64_C(1000000)
+#define READ_RETRIES   64
+#define ATTACH_RETRIES 2
 
 void (*psmi_test_lock_opened)(void);
 bool psmi_test_skip_seq_recheck;
@@ -75,14 +72,6 @@ static uint32_t next_generation(uint32_t gen)
 {
     return gen == UINT32_MAX ? 1 : gen + 1;
 }
-
-/* 32-bit arches have a separate futex syscall taking the 64-bit
- * struct __kernel_timespec; 64-bit arches only have the one. */
-#ifdef SYS_futex_time64
-#define PSMI_SYS_FUTEX SYS_futex_time64
-#else
-#define PSMI_SYS_FUTEX SYS_futex
-#endif
 
 /* Shared (not _PRIVATE) futex: waiters and the writer map the same file. */
 static void futex_wake_all(uint32_t *addr)
@@ -804,8 +793,7 @@ static int reader_sync(psmsgr_state_reader *r)
     return PSMSGR_E_NODATA;
 }
 
-/* §6.2 orphan check: detaches if the path no longer names the mapped file. */
-static int identity_check(psmsgr_state_reader *r)
+int psmi_reader_identity_check(psmsgr_state_reader *r)
 {
     if (r->hdr == NULL)
         return PSMSGR_OK;
@@ -919,6 +907,37 @@ int psmsgr_state_describe_sized(psmsgr_state_reader *r, psmsgr_state_desc *desc,
     return PSMSGR_OK;
 }
 
+int psmi_reader_wait_step(psmsgr_state_reader *r, uint32_t last_generation, uint32_t *generation,
+                          const uint32_t **addr, uint32_t *expected)
+{
+    for (;;) {
+        int rc = reader_sync(r);
+        if (rc == PSMSGR_E_NODATA)
+            return PSMI_STEP_UNATTACHED;
+        if (rc != PSMSGR_OK)
+            return rc;
+        if (r->config_flags & PSMI_CONFIG_NO_NOTIFY)
+            return PSMSGR_E_NOTSUP;
+        /* Load notify BEFORE the check: a publish in between changes it, and
+         * the futex wait then returns at once instead of losing the wake-up. */
+        uint32_t n = load_acquire(&r->hdr->notify);
+        if (retired(r))
+            continue;
+        psmsgr_state_info info;
+        rc = read_latest(r, NULL, 0, false, &info);
+        if (rc == PSMSGR_OK && info.generation != last_generation) {
+            *generation = info.generation;
+            return PSMSGR_OK;
+        }
+        if (rc == PSMSGR_E_FORMAT)
+            return rc;
+        /* NODATA and BUSY count as unchanged. */
+        *addr = &r->hdr->notify;
+        *expected = n;
+        return PSMI_STEP_ARMED;
+    }
+}
+
 /* §6.6 */
 int psmsgr_state_wait(psmsgr_state_reader *r, uint32_t last_generation, int32_t timeout_ms)
 {
@@ -928,14 +947,16 @@ int psmsgr_state_wait(psmsgr_state_reader *r, uint32_t last_generation, int32_t 
     uint64_t deadline =
         infinite ? UINT64_MAX : psmi_clock_ns(CLOCK_MONOTONIC) + (uint64_t)timeout_ms * NS_PER_MS;
     for (;;) {
-        int rc = reader_sync(r);
-        if (rc != PSMSGR_OK && rc != PSMSGR_E_NODATA)
+        uint32_t generation, n;
+        const uint32_t *notify;
+        int rc = psmi_reader_wait_step(r, last_generation, &generation, &notify, &n);
+        if (rc <= PSMSGR_OK) /* changed, or an error; the PSMI_STEP_* are > 0 */
             return rc;
 
-        if (rc == PSMSGR_E_NODATA) { /* unattached: poll the attach */
-            uint64_t now = psmi_clock_ns(CLOCK_MONOTONIC);
-            if (now >= deadline)
-                return PSMSGR_E_TIMEOUT;
+        uint64_t now = psmi_clock_ns(CLOCK_MONOTONIC);
+        if (now >= deadline)
+            return PSMSGR_E_TIMEOUT;
+        if (rc == PSMI_STEP_UNATTACHED) { /* poll the attach */
             uint64_t ns = deadline - now < UNATTACHED_POLL_NS ? deadline - now : UNATTACHED_POLL_NS;
             struct timespec ts = { .tv_sec = 0, .tv_nsec = (long)ns };
             if (clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, NULL) == EINTR)
@@ -943,30 +964,12 @@ int psmsgr_state_wait(psmsgr_state_reader *r, uint32_t last_generation, int32_t 
             continue;
         }
 
-        if (r->config_flags & PSMI_CONFIG_NO_NOTIFY)
-            return PSMSGR_E_NOTSUP;
-        /* Load notify BEFORE the check: a publish in between changes it, and
-         * FUTEX_WAIT then returns at once instead of losing the wake-up. */
-        uint32_t n = load_acquire(&r->hdr->notify);
-        if (retired(r))
-            continue;
-        psmsgr_state_info info;
-        rc = read_latest(r, NULL, 0, false, &info);
-        if (rc == PSMSGR_OK && info.generation != last_generation)
-            return PSMSGR_OK;
-        if (rc == PSMSGR_E_FORMAT)
-            return rc;
-        /* NODATA and BUSY count as unchanged. */
-
-        uint64_t now = psmi_clock_ns(CLOCK_MONOTONIC);
-        if (now >= deadline)
-            return PSMSGR_E_TIMEOUT;
         uint64_t slice = deadline - now < WAIT_SLICE_NS ? deadline - now : WAIT_SLICE_NS;
-        if (futex_wait(&r->hdr->notify, n, slice) != 0) {
+        if (futex_wait(notify, n, slice) != 0) {
             if (errno == EINTR)
                 return PSMSGR_E_INTR;
             if (errno == ETIMEDOUT) {
-                if ((rc = identity_check(r)) != PSMSGR_OK)
+                if ((rc = psmi_reader_identity_check(r)) != PSMSGR_OK)
                     return rc;
             } else if (errno != EAGAIN) {
                 return PSMSGR_E_SYS; /* e.g. ENOSYS under seccomp: never spin */
@@ -979,7 +982,7 @@ int psmsgr_state_writer_alive(psmsgr_state_reader *r)
 {
     if (r == NULL)
         return PSMSGR_E_INVAL;
-    int rc = identity_check(r);
+    int rc = psmi_reader_identity_check(r);
     if (rc != PSMSGR_OK)
         return rc;
     (void)reader_sync(r); /* reattach if possible; liveness does not depend on it */

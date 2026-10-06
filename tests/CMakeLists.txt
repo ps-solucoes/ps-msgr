@@ -50,6 +50,7 @@ psmsgr_add_test(test_common test_common.c)
 psmsgr_add_test(test_headers test_headers.c)
 psmsgr_add_test(test_state test_state.c)
 psmsgr_add_test(test_state_hooks test_state_hooks.c STATIC)
+psmsgr_add_test(test_waitset test_waitset.c)
 # Seqlock torture: select with ctest -L torture, skip with -LE torture.
 psmsgr_add_test(test_torture test_torture.c STATIC LABEL torture)
 if(TARGET psmsgr-dump)

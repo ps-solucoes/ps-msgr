@@ -75,7 +75,8 @@ endif()
 set(PSMSGR_SOURCES
     src/common.c
     src/seqcopy.c
-    src/state.c)
+    src/state.c
+    src/waitset.c)
 
 add_library(psmsgr_objects OBJECT ${PSMSGR_SOURCES})
 target_include_directories(psmsgr_objects PUBLIC
