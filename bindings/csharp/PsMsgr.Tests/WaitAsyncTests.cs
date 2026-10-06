@@ -304,6 +304,34 @@ public sealed class WaitAsyncTests : ChannelTest
     // No local keeps the reader; only the pending wait does.
     private Task<bool> StartUnreferenced(uint gen) => OpenReader().WaitAsync(gen, Long);
 
+    private static readonly AsyncLocal<object?> CallerScope = new();
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BackgroundThreadsDropCallerContext(bool flowSuppressed)
+    {
+        // The waiting threads outlive the WaitAsync that starts them: they must not keep
+        // its AsyncLocal values reachable.
+        CallerScope.Value = new object();
+        object? seen = "unset";
+        Thread t;
+        if (flowSuppressed)
+        {
+            using (ExecutionContext.SuppressFlow())
+                t = WaitSet.StartThread(() => seen = CallerScope.Value, "PsMsgr.Test");
+            Assert.False(ExecutionContext.IsFlowSuppressed());
+        }
+        else
+        {
+            t = WaitSet.StartThread(() => seen = CallerScope.Value, "PsMsgr.Test");
+            Assert.False(ExecutionContext.IsFlowSuppressed());
+        }
+        Assert.True(t.Join(Long));
+        Assert.Null(seen);
+        Assert.NotNull(CallerScope.Value);
+    }
+
     [Fact]
     public async Task WaitingThreadResumesAfterSignals()
     {

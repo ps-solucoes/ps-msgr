@@ -212,7 +212,8 @@ public sealed unsafe class StateReader : IDisposable
     /// timeout means the same as for <see cref="Wait"/>; <see cref="TimeSpan.Zero"/> polls
     /// once and returns a completed task. A cancellation cancels the task, and a
     /// <see cref="Dispose"/> from another thread faults it with
-    /// <see cref="ObjectDisposedException"/>, both at once; if the change arrived first, it
+    /// <see cref="ObjectDisposedException"/>, both at once (within 100 ms where the kernel
+    /// lacks <c>futex_waitv</c>); if the change arrived first, it
     /// is the result. Errors fault the task with the exception <see cref="Wait"/> throws.
     /// Until the task completes, the reader belongs to it: any other call on the reader but
     /// <see cref="Dispose"/> throws <see cref="InvalidOperationException"/>. One background

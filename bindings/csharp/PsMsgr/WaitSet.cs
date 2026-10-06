@@ -125,9 +125,28 @@ internal sealed unsafe class WaitSet
             HasWaitSets = true;
             var set = new WaitSet(ws) { _count = 1 };
             Sets.Add(set);
-            new Thread(set.Run) { IsBackground = true, Name = "PsMsgr.WaitAsync" }.Start();
+            StartThread(set.Run, "PsMsgr.WaitAsync");
             return set;
         }
+    }
+
+    /// <summary>Starts a background thread without the caller's
+    /// <see cref="ExecutionContext"/>, so that a thread that outlives the call does not keep
+    /// the caller's <see cref="AsyncLocal{T}"/> values (an Activity, a logging scope)
+    /// reachable.</summary>
+    internal static Thread StartThread(ThreadStart run, string name)
+    {
+        var t = new Thread(run) { IsBackground = true, Name = name };
+        if (ExecutionContext.IsFlowSuppressed())
+        {
+            t.Start();
+        }
+        else
+        {
+            using (ExecutionContext.SuppressFlow())
+                t.Start();
+        }
+        return t;
     }
 
     // After the add: makes the registration one that a timeout, cancellation or Dispose
@@ -266,7 +285,7 @@ internal sealed class AsyncWait
     {
         var w = new AsyncWait(reader, null, 0, deadline, cancellationToken);
         reader.BeginAsyncWait(w, addRef: false);
-        new Thread(() => w.RunBlocking(lastGeneration)) { IsBackground = true, Name = "PsMsgr.Wait" }.Start();
+        WaitSet.StartThread(() => w.RunBlocking(lastGeneration), "PsMsgr.Wait");
         return w.Task;
     }
 

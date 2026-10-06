@@ -363,7 +363,9 @@ public enum PsMsgrError { Inval = -1, Sys = -2, NoData = -3, TooSmall = -4, TooB
     `PSMSGR_WAITSET_MAX` (127) readers; more concurrent waits open more
     sets, each with its thread. The first `WaitAsync` that registers opens
     the first set and starts its thread; sets and threads stay for the life
-    of the process, blocked in the kernel while idle.
+    of the process, blocked in the kernel while idle. The threads start
+    without the caller's `ExecutionContext`, so they keep none of its
+    `AsyncLocal` values (an `Activity`, a logging scope) reachable.
   - Where `psmsgr_waitset_open` returns `NOTSUP` (Linux < 5.16,
     qemu-user), each `WaitAsync` runs `Wait` on a background thread of its
     own instead, so a cancellation or `Dispose` takes effect within
