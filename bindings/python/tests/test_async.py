@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-"""StateReader.wait_async: through the waitsets, and through the thread per
-wait that replaces them where psmsgr_waitset_open returns NOTSUP."""
+"""StateReader.wait_async: through the waitsets, and through the shared
+threads that replace them where psmsgr_waitset_open returns NOTSUP."""
 
 from __future__ import annotations
 
@@ -40,6 +40,13 @@ def _have_waitsets() -> bool:
     if rc == _native.OK:
         _native.waitset_close(ws)
     return rc == _native.OK
+
+
+@pytest.fixture(autouse=True)
+def idle_threads_end(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The fallback's threads end as soon as they are idle, so that the tests
+    # can count those in use. test_threads_are_reused sets its own.
+    monkeypatch.setattr(_waitset, "idle_timeout", 0)
 
 
 @pytest.fixture(params=["waitset", "threads"])
@@ -395,6 +402,37 @@ def test_notsup_falls_back_to_threads(
 
     run(main)
     assert len(opened) == 1  # tried once
+
+
+def test_threads_are_reused(
+    channel: tuple[StateWriter, StateReader], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    w, r = channel
+    monkeypatch.setattr(_waitset, "unsupported", True)
+    monkeypatch.setattr(_waitset, "idle_timeout", 0.2)
+
+    async def main() -> None:
+        gen = w.publish(b"a")
+        started = _waitset.started
+        # Each wait starts after the previous one's result, as a consumer loop does.
+        for _ in range(20):
+            task = asyncio.create_task(r.wait_async(gen, 10))
+            await asyncio.sleep(0.001)
+            gen = w.publish(b"b")
+            assert await task is True
+        assert _waitset.started - started == 1
+        assert len(wait_threads()) == 1
+        # Idle, it ends; a wait after that starts another.
+        await until(lambda: not wait_threads())
+        assert not _waitset._idle
+        task = asyncio.create_task(r.wait_async(gen, 10))
+        await asyncio.sleep(0.01)
+        w.publish(b"c")
+        assert await task is True
+        assert _waitset.started - started == 2
+        await until(lambda: not wait_threads())
+
+    run(main)
 
 
 def test_waiting_threads_do_not_keep_the_process(

@@ -1,18 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 """The waitsets behind ``StateReader.wait_async``: one daemon thread per set
 of up to PSMSGR_WAITSET_MAX readers, started on first use, waits for all of
-them and hands each event to a callback."""
+them and hands each event to a callback. Without them, ``run_in_thread``
+runs each wait on a daemon thread that the next wait reuses."""
 
 from __future__ import annotations
 
 import ctypes
 import itertools
 import os
+import queue
 import threading
 import time
 from collections.abc import Callable
 from ctypes import byref, c_uint32
-from typing import Any
+from typing import Any, TypeVar
 
 from . import _native
 from ._errors import error
@@ -21,7 +23,7 @@ from ._errors import error
 Callback = Callable[[int, int, int], None]
 
 # True once psmsgr_waitset_open returned NOTSUP (no futex_waitv): callers then
-# wait with a thread per reader. Tests set it to exercise that path.
+# wait on the threads of run_in_thread. Tests set it to exercise that path.
 unsupported = False
 
 # Guards the list of sets and each set's registrations.
@@ -29,6 +31,19 @@ _lock = threading.Lock()
 _sets: list[_Set] = []
 _opened: list[_Set] = []  # also the sets that failed and left _sets
 _tokens = itertools.count(1)
+
+T = TypeVar("T")
+# A run_in_thread call: the work and what gets its result.
+_Item = tuple[Callable[[], Any], Callable[[Any], None]]
+
+# The threads of run_in_thread waiting for work, the most recently idle last,
+# so that the others reach their timeout.
+_idle_lock = threading.Lock()
+_idle: list[_WaitThread] = []
+# Seconds without work after which such a thread ends; the tests change it.
+idle_timeout = 10.0
+# Threads run_in_thread started, for the tests.
+started = 0
 
 
 class Registration:
@@ -173,15 +188,78 @@ def register(h: Any, last_generation: int, callback: Callback) -> Registration |
     return reg
 
 
+class _WaitThread:
+    __slots__ = ("timeout", "work")
+
+    def __init__(self) -> None:
+        self.work: queue.SimpleQueue[_Item] = queue.SimpleQueue()
+        # idle_timeout when the thread last became idle.
+        self.timeout = idle_timeout
+
+    def run(self) -> None:
+        while self._run_next():
+            pass
+
+    # A separate function, so that its locals don't keep the last wait (and
+    # through it the reader) alive while the thread is idle.
+    def _run_next(self) -> bool:
+        item = self._take()
+        if item is None:
+            return False
+        work, done = item
+        result: Any
+        try:
+            result = work()
+        except BaseException as e:
+            result = e
+        # Before done: a wait that it leads to gets this thread.
+        with _idle_lock:
+            self.timeout = idle_timeout
+            _idle.append(self)
+        _call(done, result)
+        return True
+
+    def _take(self) -> _Item | None:
+        try:
+            return self.work.get(timeout=self.timeout)
+        except queue.Empty:
+            pass
+        with _idle_lock:
+            if self in _idle:
+                _idle.remove(self)
+                return None
+        # run_in_thread took this thread meanwhile: its work is on the way.
+        return self.work.get()
+
+
+def run_in_thread(work: Callable[[], T], done: Callable[[T | BaseException], None]) -> None:
+    """Calls ``work()`` on an idle daemon thread, or on a new one if none is
+    idle, then ``done`` with its result or exception. The thread is idle
+    again before ``done`` runs, and ends after ``idle_timeout`` without
+    work. Raises if a new thread cannot start."""
+    global started
+    with _idle_lock:
+        t = _idle.pop() if _idle else None
+    if t is None:
+        t = _WaitThread()
+        threading.Thread(target=t.run, name="ps_msgr wait", daemon=True).start()
+        with _idle_lock:
+            started += 1
+    t.work.put((work, done))
+
+
 def _after_fork_in_child() -> None:
     # The sets' threads do not exist in the child: start over with new sets.
     # The old ones are left alone, since a thread may have held their locks.
-    global _lock, _sets, _opened
+    # The idle threads are gone too: forget them and their lock.
+    global _lock, _sets, _opened, _idle_lock, _idle
     for s in _opened:
         s.forked = True
     _lock = threading.Lock()
     _sets = []
     _opened = []
+    _idle_lock = threading.Lock()
+    _idle = []
 
 
 os.register_at_fork(after_in_child=_after_fork_in_child)

@@ -112,7 +112,11 @@ The rules that apply to all of them (Go differs where its section says so):
     no new waits, and an error in one delivery doesn't stop its thread.
   - Where `psmsgr_waitset_open` returns `NOTSUP` (Linux < 5.16,
     qemu-user), the binding remembers it and runs each `wait_async` as
-    `wait` on a daemon thread of its own.
+    `wait` on a daemon thread. The threads are shared and reused: a wait
+    takes the most recently idle one, or starts a new one if none is idle.
+    A thread becomes idle before it posts the result, so that a wait the
+    result leads to reuses it, and ends after 10 s idle. An idle thread
+    references no reader. A child of `fork` starts with no idle threads.
   - Arguments, result and exceptions are `wait`'s: an event's status other
     than `OK` raises what `wait` raises for that code. `None` (or
     `math.inf`) waits indefinitely and `0` polls once, synchronously. A
@@ -425,10 +429,16 @@ public enum PsMsgrError { Inval = -1, Sys = -2, NoData = -3, TooSmall = -4, TooB
     they keep none of its `AsyncLocal` values (an `Activity`, a logging
     scope) reachable.
   - Where `psmsgr_waitset_open` returns `NOTSUP` (Linux < 5.16,
-    qemu-user), each `WaitAsync` runs `Wait` on a background thread of its
-    own instead, so a cancellation or `Dispose` takes effect within
-    100 ms. If that thread cannot start, `WaitAsync` throws and the reader
-    is free again. The tests run both ways, through an internal switch.
+    qemu-user), each `WaitAsync` runs `Wait` on a background thread
+    instead, so a cancellation or `Dispose` takes effect within 100 ms.
+    The threads are shared and reused: a wait takes the most recently
+    idle one, or starts a new one if none is idle. A thread becomes idle
+    before it completes the task, so that the continuation's next wait
+    reuses it, and ends after 10 s idle. An idle thread references no
+    reader. The threads start without the caller's `ExecutionContext`, as
+    the waitset threads do. If a new thread cannot start, `WaitAsync`
+    throws and the reader is free again. The tests run both ways, through an internal
+    switch.
 - `WriteScope` holds only an id; the writer holds the state. So copies of a
   scope, including the read-only variable of a `using`, stay coherent: a
   commit through one ends them all, and `Dispose` after a commit does

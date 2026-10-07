@@ -88,7 +88,8 @@ that tells a stale writer from a dead one, and Ctrl-C.
   `KeyboardInterrupt` as usual.
 - `await r.wait_async(seen, timeout=0.5)` is `wait()` for `asyncio`. One
   daemon thread waits for up to 127 readers (on kernels before 5.16, a
-  thread per wait instead), so many readers need no thread each.
+  thread per wait instead, reused by the next wait and ended after 10 s
+  idle), so many readers need no thread each.
   Cancelling the task stops the wait; until it ends, `close()` is the only
   other call allowed on the reader. Starting, cancelling or closing a wait
   can block the loop while that thread scans its readers (attaching

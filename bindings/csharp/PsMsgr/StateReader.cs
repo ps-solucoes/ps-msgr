@@ -219,7 +219,8 @@ public sealed unsafe class StateReader : IDisposable
     /// Until the task completes, the reader belongs to it: any other call on the reader but
     /// <see cref="Dispose"/> throws <see cref="InvalidOperationException"/>. One background
     /// thread per process (per 127 waiting readers) completes these tasks; their
-    /// continuations never run on it.
+    /// continuations never run on it. Without <c>futex_waitv</c>, each wait blocks a
+    /// background thread, which the next wait reuses; a thread ends after 10 s idle.
     /// </summary>
     public Task<bool> WaitAsync(uint lastGeneration, TimeSpan timeout, CancellationToken cancellationToken = default)
         => WaitAsync(lastGeneration, timeout, cancellationToken, threadPerWait: false);
