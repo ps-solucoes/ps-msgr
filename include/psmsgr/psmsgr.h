@@ -22,7 +22,7 @@ extern "C" {
  * API/ABI may change freely. CMake reads the version from these lines. */
 #define PSMSGR_VERSION_MAJOR 1
 #define PSMSGR_VERSION_MINOR 1
-#define PSMSGR_VERSION_PATCH 0
+#define PSMSGR_VERSION_PATCH 1
 
 #define PSMSGR_VERSION_NUMBER(major, minor, patch) \
     (((uint32_t)(major) << 16) | ((uint32_t)(minor) << 8) | (uint32_t)(patch))

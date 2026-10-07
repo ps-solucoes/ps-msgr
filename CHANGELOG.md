@@ -7,6 +7,21 @@ as described in [`spec/README.md`](spec/README.md).
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-07
+
+Library 1.1.1, with no change from 1.1.0; the bindings `ps_msgr` (Python)
+and `PsMsgr` (C#) 1.1.1. The Go binding is unchanged.
+
+### Changed
+
+- `ps_msgr`, `PsMsgr`: without `futex_waitv` (Linux < 5.16, qemu-user),
+  `wait_async` and `WaitAsync` reuse a shared cache of threads, which end
+  after 10 s idle, instead of starting a thread per wait (#47).
+- `PsMsgr`: the documentation of `StateReader.WaitAsync` says that it may
+  complete synchronously, and points to `Task.Yield` for loops that must
+  not starve each other.
+- `abi/`: `abidw` snapshots of the 1.1.1 public ABI, identical to 1.1.0.
+
 ## [1.1.0] - 2026-10-06
 
 Library 1.1.0; the bindings `ps_msgr` (Python) and `PsMsgr` (C#) 1.1.0, and
