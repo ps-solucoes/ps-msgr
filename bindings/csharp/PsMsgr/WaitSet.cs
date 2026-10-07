@@ -11,8 +11,8 @@ namespace PsMsgr;
 /// the <see cref="StateReader.WaitAsync(uint, TimeSpan, CancellationToken)"/> calls
 /// registered with it. A set holds up to <see cref="Native.WaitSetMax"/> readers; more
 /// concurrent waits open more sets. Sets and their threads are created on demand and kept
-/// for the life of the process. Without <c>futex_waitv</c> each wait gets a thread of its
-/// own instead (spec/bindings.md).
+/// for the life of the process. Without <c>futex_waitv</c> each wait blocks a
+/// <see cref="WaitThread"/> instead (spec/bindings.md).
 /// </summary>
 internal sealed unsafe class WaitSet
 {
@@ -64,7 +64,7 @@ internal sealed unsafe class WaitSet
     {
         WaitSet? set = threadPerWait ? null : Reserve();
         if (set is null)
-            return AsyncWait.StartThread(reader, lastGeneration, deadline, cancellationToken);
+            return AsyncWait.RunOnThread(reader, lastGeneration, deadline, cancellationToken);
 
         ulong token = (ulong)Interlocked.Increment(ref LastToken);
         var w = new AsyncWait(reader, set, token, lastGeneration, deadline, cancellationToken);
@@ -259,7 +259,7 @@ internal sealed unsafe class WaitSet
 }
 
 /// <summary>One <see cref="StateReader.WaitAsync(uint, TimeSpan, CancellationToken)"/>:
-/// a waitset registration, or a thread of its own.</summary>
+/// a waitset registration, or a <see cref="WaitThread"/> blocked in it.</summary>
 internal sealed class AsyncWait
 {
     internal enum Outcome { Timeout, Canceled, Disposed, Error }
@@ -296,13 +296,13 @@ internal sealed class AsyncWait
 
     internal void SetHandle(IntPtr h) => _handle = h;
 
-    internal static Task<bool> StartThread(StateReader reader, uint lastGeneration, ulong deadline, CancellationToken cancellationToken)
+    internal static Task<bool> RunOnThread(StateReader reader, uint lastGeneration, ulong deadline, CancellationToken cancellationToken)
     {
         var w = new AsyncWait(reader, null, 0, lastGeneration, deadline, cancellationToken);
         reader.BeginAsyncWait(w, addRef: false);
         try
         {
-            WaitSet.StartThread(w.RunBlocking, "PsMsgr.Wait");
+            WaitThread.Dispatch(w);
         }
         catch
         {
@@ -312,27 +312,30 @@ internal sealed class AsyncWait
         return w.Task;
     }
 
-    // Without waitsets: the synchronous wait, which checks the token and Dispose every 100 ms.
-    private void RunBlocking()
+    // Without waitsets, on a WaitThread: the synchronous wait, which checks the token and
+    // Dispose every 100 ms.
+    internal void RunBlocking(WaitThread thread)
     {
-        bool changed;
+        bool changed = false;
+        Exception? error = null;
         try
         {
             changed = _reader.WaitUntil(_lastGeneration, Deadline, _cancellationToken);
         }
-        catch (OperationCanceledException) when (_cancellationToken.IsCancellationRequested)
-        {
-            if (TryFinish())
-                _tcs.TrySetCanceled(_cancellationToken);
-            return;
-        }
         catch (Exception e)
         {
-            Fail(e);
-            return;
+            error = e;
         }
-        if (TryFinish())
+        // Before the task completes: the continuation's next wait gets this thread.
+        thread.BecomeIdle();
+        if (!TryFinish())
+            return;
+        if (error is null)
             _tcs.TrySetResult(changed);
+        else if (error is OperationCanceledException && _cancellationToken.IsCancellationRequested)
+            _tcs.TrySetCanceled(_cancellationToken);
+        else
+            _tcs.TrySetException(error);
     }
 
     internal bool TryRegister() => Interlocked.CompareExchange(ref _state, Registered, Adding) == Adding;
@@ -356,8 +359,8 @@ internal sealed class AsyncWait
     }
 
     /// <summary>Ends a registered wait by removing it from the set. If the set has already
-    /// reported it, the event is the answer instead. No-op with a thread per wait: that
-    /// thread sees the cancellation and Dispose itself.</summary>
+    /// reported it, the event is the answer instead. No-op without waitsets: the
+    /// <see cref="WaitThread"/> sees the cancellation and Dispose itself.</summary>
     internal void Abort(Outcome how, Exception? error = null)
     {
         if (_set is null || Interlocked.CompareExchange(ref _state, Claimed, Registered) != Registered)

@@ -449,11 +449,11 @@ class StateReader:
     async def wait_async(self, last_generation: int = 0, timeout: float | None = None) -> bool:
         """``wait`` for asyncio, without a blocked thread per reader: one
         thread waits for up to 127 readers (where the kernel lacks
-        ``futex_waitv``, a thread per wait instead). Same arguments and
-        result. Cancelling the task takes the reader out of the wait. Until
-        the wait ends, ``close()`` is the only other call allowed on the
-        reader (others raise ``RuntimeError``); it makes the wait raise
-        ``ValueError``."""
+        ``futex_waitv``, a thread per wait instead, reused by the next wait
+        and ended after 10 s idle). Same arguments and result. Cancelling
+        the task takes the reader out of the wait. Until the wait ends,
+        ``close()`` is the only other call allowed on the reader (others
+        raise ``RuntimeError``); it makes the wait raise ``ValueError``."""
         last = _u32("last_generation", last_generation)
         t = _timeout_ns(timeout)
         if t == 0:
@@ -629,23 +629,20 @@ class _AsyncWait:
             self._post(_closed(self.reader))
 
     async def in_thread(self, h: Any, last: int, timeout_ns: int | None) -> bool:
-        """The fallback without waitsets: ``wait`` on a daemon thread."""
+        """The fallback without waitsets: ``wait`` on a daemon thread, which
+        later waits reuse."""
         r = self.reader
         deadline = None if timeout_ns is None else time.monotonic_ns() + timeout_ns
 
-        def run() -> None:
-            result: bool | BaseException
+        def work() -> bool:
             try:
-                result = r._wait(h, last, deadline, self)
-            except BaseException as e:
-                result = e
+                return r._wait(h, last, deadline, self)
             finally:
                 r._end_async(self)
                 r._leave(h)
-            self._post(result)
 
         try:
-            threading.Thread(target=run, name="ps_msgr wait", daemon=True).start()
+            _waitset.run_in_thread(work, self._post)
         except BaseException:
             r._end_async(self)
             r._leave(h)

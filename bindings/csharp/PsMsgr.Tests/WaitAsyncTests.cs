@@ -346,6 +346,62 @@ public sealed class WaitAsyncTests : ChannelTest
     }
 
     [Fact]
+    public async Task ThreadPerWaitReusesThreads()
+    {
+        using var w = OpenWriter(8);
+        using var r = OpenReader();
+        uint gen = w.Publish(B("a"));
+        int started = WaitThread.Started;
+        // Each wait starts from the previous one's continuation, as a consumer loop does.
+        for (int i = 0; i < 20; i++)
+        {
+            Task<bool> waiting = r.WaitAsync(gen, Long, default, threadPerWait: true);
+            gen = w.Publish(B("b"));
+            Assert.True(await waiting.WaitAsync(Long));
+        }
+        // The first one's, if no thread was idle.
+        Assert.InRange(WaitThread.Started - started, 0, 1);
+    }
+
+    [Fact]
+    public async Task IdleWaitThreadsEnd()
+    {
+        using var w = OpenWriter(8);
+        uint gen = w.Publish(B("a"));
+        TimeSpan idle = WaitThread.IdleTimeout;
+        WaitThread.IdleTimeout = TimeSpan.FromMilliseconds(100);
+        // A wait for every idle thread and one more, so that all of them wait again with
+        // the short timeout.
+        var readers = Enumerable.Range(0, WaitThread.IdleCount + 1).Select(_ => OpenReader()).ToList();
+        try
+        {
+            int started = WaitThread.Started;
+            var waits = readers.Select(r => r.WaitAsync(gen, Long, default, threadPerWait: true)).ToList();
+            Assert.True(WaitThread.Started > started);
+            Assert.Equal(0, WaitThread.IdleCount);
+            w.Publish(B("b"));
+            Assert.All(await Task.WhenAll(waits).WaitAsync(Long), Assert.True);
+            var sw = Stopwatch.StartNew();
+            while (WaitThread.IdleCount > 0 && sw.Elapsed < Long)
+                await Task.Delay(20);
+            Assert.Equal(0, WaitThread.IdleCount);
+
+            // A wait after that starts a thread again.
+            started = WaitThread.Started;
+            Task<bool> waiting = readers[0].WaitAsync(GenAfter(gen, 1), Long, default, threadPerWait: true);
+            Assert.Equal(started + 1, WaitThread.Started);
+            w.Publish(B("c"));
+            Assert.True(await waiting.WaitAsync(Long));
+        }
+        finally
+        {
+            WaitThread.IdleTimeout = idle;
+            foreach (StateReader r in readers)
+                r.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task PendingWaitKeepsReaderAlive()
     {
         using var w = OpenWriter(8);

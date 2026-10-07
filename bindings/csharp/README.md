@@ -90,8 +90,9 @@ publishing for the BeagleBone Black.
   indefinitely.
 - `await r.WaitAsync(seen, timeout, token)` waits the same way without
   blocking a thread per reader: one background thread per 127 waiting
-  readers completes the tasks (libpsmsgr waitsets, Linux 5.16; older
-  kernels get a thread per wait). Until the task completes, the reader
+  readers completes the tasks (libpsmsgr waitsets, Linux 5.16; on older
+  kernels each wait blocks a thread, reused by the next wait and ended
+  after 10 s idle). Until the task completes, the reader
   belongs to it: other calls throw `InvalidOperationException`, except
   `Dispose`, which ends the wait with `ObjectDisposedException`. A value
   that changed already gives a completed task, so a read/await loop does
