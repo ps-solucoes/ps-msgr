@@ -1,0 +1,541 @@
+<abi-corpus version='2.4' architecture='elf-arm' soname='libpsmsgr.so.1'>
+  <elf-needed>
+    <dependency name='libc.so.6'/>
+    <dependency name='ld-linux-armhf.so.3'/>
+  </elf-needed>
+  <elf-function-symbols>
+    <elf-symbol name='psmsgr_now_ns' version='PSMSGR_1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_state_abort' version='PSMSGR_1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_state_begin' version='PSMSGR_1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_state_commit' version='PSMSGR_1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_state_describe_sized' version='PSMSGR_1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_state_options_init_sized' version='PSMSGR_1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_state_peek' version='PSMSGR_1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_state_publish' version='PSMSGR_1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_state_read' version='PSMSGR_1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_state_reader_close' version='PSMSGR_1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_state_reader_open' version='PSMSGR_1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_state_unlink' version='PSMSGR_1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_state_wait' version='PSMSGR_1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_state_writer_alive' version='PSMSGR_1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_state_writer_capacity' version='PSMSGR_1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_state_writer_close' version='PSMSGR_1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_state_writer_open' version='PSMSGR_1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_strerror' version='PSMSGR_1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_version' version='PSMSGR_1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_waitset_add' version='PSMSGR_1.1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_waitset_close' version='PSMSGR_1.1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_waitset_open' version='PSMSGR_1.1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_waitset_remove' version='PSMSGR_1.1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_waitset_wait' version='PSMSGR_1.1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='psmsgr_waitset_wake' version='PSMSGR_1.1' is-default-version='yes' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+  </elf-function-symbols>
+  <undefined-elf-function-symbols>
+    <elf-symbol name='__clock_gettime64' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='__clock_nanosleep_time64' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='__cxa_finalize' type='func-type' binding='weak-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='__errno_location' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='__fcntl_time64' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='__fstat64_time64' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='__lstat64_time64' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='__memcpy_chk' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='__stack_chk_fail' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='calloc' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='close' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='closedir' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='dirfd' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='fchmod' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='free' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='getenv' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='getpid' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='getrandom' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='malloc' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='memcpy' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='memmove' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='memset' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='mkostemp64' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='mmap64' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='munmap' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='open64' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='opendir' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='posix_fallocate64' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='pread64' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='raise' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='readdir64' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='rename' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='sched_yield' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='strchr' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='strlen' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='strncmp' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='syscall' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='unlink' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='unlinkat' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+  </undefined-elf-function-symbols>
+  <undefined-elf-variable-symbols>
+    <elf-symbol name='_ITM_deregisterTMCloneTable' type='no-type' binding='weak-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='_ITM_registerTMCloneTable' type='no-type' binding='weak-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='__gmon_start__' type='no-type' binding='weak-binding' visibility='default-visibility' is-defined='no'/>
+    <elf-symbol name='__stack_chk_guard' version='GLIBC_2.4' is-default-version='yes' type='object-type' binding='global-binding' visibility='default-visibility' is-defined='no'/>
+  </undefined-elf-variable-symbols>
+  <abi-instr address-size='32' path='common.c' language='LANG_C11'>
+    <type-decl name='char' size-in-bits='8' hash='65b2d157027b431a' id='type-id-1'/>
+    <type-decl name='int' size-in-bits='32' hash='09d17c08f594edc7' id='type-id-2'/>
+    <typedef-decl name='__clockid_t' type-id='type-id-2' size-in-bits='32' filepath='types.h' line='169' column='1' hash='09d17c08f594edc7' id='type-id-3'/>
+    <typedef-decl name='__uint32_t' type-id='type-id-4' size-in-bits='32' filepath='types.h' line='42' column='1' hash='e66b43f97c38e87a' id='type-id-5'/>
+    <typedef-decl name='__uint64_t' type-id='type-id-6' size-in-bits='64' filepath='types.h' line='48' column='1' hash='ebdfc4685a1e82df' id='type-id-7'/>
+    <typedef-decl name='clockid_t' type-id='type-id-3' size-in-bits='32' filepath='clockid_t.h' line='7' column='1' hash='09d17c08f594edc7' id='type-id-8'/>
+    <typedef-decl name='uint32_t' type-id='type-id-5' size-in-bits='32' filepath='stdint-uintn.h' line='26' column='1' hash='e66b43f97c38e87a' id='type-id-9'/>
+    <typedef-decl name='uint64_t' type-id='type-id-7' size-in-bits='64' filepath='stdint-uintn.h' line='27' column='1' hash='ebdfc4685a1e82df' id='type-id-10'/>
+    <type-decl name='unsigned int' size-in-bits='32' hash='e66b43f97c38e87a' id='type-id-4'/>
+    <type-decl name='unsigned long long int' size-in-bits='64' hash='ebdfc4685a1e82df#2' id='type-id-6'/>
+    <qualified-type-def type-id='type-id-1' const='yes' hash='3e50fd33f9bb78d9' id='type-id-11'/>
+    <pointer-type-def type-id='type-id-11' size-in-bits='32' hash='1b788021282f0875' id='type-id-12'/>
+    <function-decl name='__stack_chk_fail' mangled-name='__stack_chk_fail' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='__stack_chk_fail' hash='28f93d42079c2801'>
+      <return type-id='type-id-13'/>
+    </function-decl>
+    <pointer-type-def type-id='type-id-14' size-in-bits='32' id='type-id-15'/>
+    <function-decl name='psmsgr_version' mangled-name='psmsgr_version' filepath='common.c' line='9' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_version@@PSMSGR_1' hash='9d519c215ecaff9e'>
+      <return type-id='type-id-9'/>
+    </function-decl>
+    <function-decl name='psmsgr_strerror' mangled-name='psmsgr_strerror' filepath='common.c' line='14' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_strerror@@PSMSGR_1' hash='558f877817b0631c'>
+      <parameter type-id='type-id-2' name='code' filepath='common.c' line='14' column='1'/>
+      <return type-id='type-id-12'/>
+    </function-decl>
+    <function-decl name='psmsgr_now_ns' mangled-name='psmsgr_now_ns' filepath='common.c' line='35' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_now_ns@@PSMSGR_1' hash='0d3783357a029fea'>
+      <return type-id='type-id-10'/>
+    </function-decl>
+    <class-decl name='timespec' is-struct='yes' visibility='default' is-declaration-only='yes' filepath='struct_timespec.h' line='11' column='1' id='type-id-14'/>
+    <function-decl name='clock_gettime' mangled-name='__clock_gettime64' filepath='time.h' line='302' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='__clock_gettime64' hash='7b7729906ef766be'>
+      <parameter type-id='type-id-8'/>
+      <parameter type-id='type-id-15'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <type-decl name='void' id='type-id-13'/>
+    <function-type size-in-bits='32' hash='28f93d42079c2801' id='type-id-16'>
+      <return type-id='type-id-13'/>
+    </function-type>
+  </abi-instr>
+  <abi-instr address-size='32' path='seqcopy.c' language='LANG_C11'>
+    <function-decl name='__builtin_memcpy' mangled-name='memcpy' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='memcpy' hash='28f93d42079c2801'>
+      <return type-id='type-id-13'/>
+    </function-decl>
+  </abi-instr>
+  <abi-instr address-size='32' path='state.c' language='LANG_C11'>
+    <type-decl name='bool' size-in-bits='8' hash='5ba96bb22f4237fb' id='type-id-17'/>
+    <type-decl name='long int' size-in-bits='32' hash='bfe66886a48d6d55#2' id='type-id-18'/>
+    <type-decl name='long long int' size-in-bits='64' hash='5ae7f9eec1fc43d6#3' id='type-id-19'/>
+    <class-decl name='psmsgr_state_desc' is-struct='yes' visibility='default' size-in-bits='128' filepath='state.h' line='52' column='1' hash='d3e31a934bd44051' id='type-id-20'>
+      <data-member access='public' layout-offset-in-bits='0'>
+        <var-decl name='capacity' type-id='type-id-9' visibility='default' filepath='state.h' line='53' column='1'/>
+      </data-member>
+      <data-member access='public' layout-offset-in-bits='32'>
+        <var-decl name='slot_count' type-id='type-id-9' visibility='default' filepath='state.h' line='54' column='1'/>
+      </data-member>
+      <data-member access='public' layout-offset-in-bits='64'>
+        <var-decl name='payload_type' type-id='type-id-9' visibility='default' filepath='state.h' line='55' column='1'/>
+      </data-member>
+      <data-member access='public' layout-offset-in-bits='96'>
+        <var-decl name='flags' type-id='type-id-9' visibility='default' filepath='state.h' line='56' column='1'/>
+      </data-member>
+    </class-decl>
+    <class-decl name='psmsgr_state_info' is-struct='yes' visibility='default' size-in-bits='192' filepath='state.h' line='42' column='1' hash='332ce5b1e2a8a700' id='type-id-21'>
+      <data-member access='public' layout-offset-in-bits='0'>
+        <var-decl name='generation' type-id='type-id-9' visibility='default' filepath='state.h' line='43' column='1'/>
+      </data-member>
+      <data-member access='public' layout-offset-in-bits='32'>
+        <var-decl name='length' type-id='type-id-9' visibility='default' filepath='state.h' line='44' column='1'/>
+      </data-member>
+      <data-member access='public' layout-offset-in-bits='64'>
+        <var-decl name='timestamp_ns' type-id='type-id-10' visibility='default' filepath='state.h' line='45' column='1'/>
+      </data-member>
+      <data-member access='public' layout-offset-in-bits='128'>
+        <var-decl name='flags' type-id='type-id-9' visibility='default' filepath='state.h' line='46' column='1'/>
+      </data-member>
+      <data-member access='public' layout-offset-in-bits='160'>
+        <var-decl name='reserved' type-id='type-id-9' visibility='default' filepath='state.h' line='47' column='1'/>
+      </data-member>
+    </class-decl>
+    <class-decl name='psmsgr_state_options' is-struct='yes' visibility='default' size-in-bits='224' filepath='state.h' line='31' column='1' hash='0528089ff1799a89' id='type-id-22'>
+      <data-member access='public' layout-offset-in-bits='0'>
+        <var-decl name='struct_size' type-id='type-id-9' visibility='default' filepath='state.h' line='32' column='1'/>
+      </data-member>
+      <data-member access='public' layout-offset-in-bits='32'>
+        <var-decl name='capacity' type-id='type-id-9' visibility='default' filepath='state.h' line='33' column='1'/>
+      </data-member>
+      <data-member access='public' layout-offset-in-bits='64'>
+        <var-decl name='slot_count' type-id='type-id-9' visibility='default' filepath='state.h' line='34' column='1'/>
+      </data-member>
+      <data-member access='public' layout-offset-in-bits='96'>
+        <var-decl name='payload_type' type-id='type-id-9' visibility='default' filepath='state.h' line='35' column='1'/>
+      </data-member>
+      <data-member access='public' layout-offset-in-bits='128'>
+        <var-decl name='mode' type-id='type-id-9' visibility='default' filepath='state.h' line='36' column='1'/>
+      </data-member>
+      <data-member access='public' layout-offset-in-bits='160'>
+        <var-decl name='flags' type-id='type-id-9' visibility='default' filepath='state.h' line='37' column='1'/>
+      </data-member>
+      <data-member access='public' layout-offset-in-bits='192'>
+        <var-decl name='dir' type-id='type-id-12' visibility='default' filepath='state.h' line='38' column='1'/>
+      </data-member>
+    </class-decl>
+    <typedef-decl name='__int32_t' type-id='type-id-2' size-in-bits='32' filepath='types.h' line='41' column='1' hash='09d17c08f594edc7' id='type-id-23'/>
+    <typedef-decl name='__int64_t' type-id='type-id-19' size-in-bits='64' filepath='types.h' line='47' column='1' hash='5ae7f9eec1fc43d6' id='type-id-24'/>
+    <typedef-decl name='__mode_t' type-id='type-id-4' size-in-bits='32' filepath='types.h' line='150' column='1' hash='e66b43f97c38e87a' id='type-id-25'/>
+    <typedef-decl name='__off64_t' type-id='type-id-24' size-in-bits='64' filepath='types.h' line='153' column='1' hash='5ae7f9eec1fc43d6' id='type-id-26'/>
+    <typedef-decl name='__pid_t' type-id='type-id-2' size-in-bits='32' filepath='types.h' line='154' column='1' hash='09d17c08f594edc7' id='type-id-27'/>
+    <typedef-decl name='__ssize_t' type-id='type-id-2' size-in-bits='32' filepath='types.h' line='194' column='1' hash='09d17c08f594edc7' id='type-id-28'/>
+    <typedef-decl name='int32_t' type-id='type-id-23' size-in-bits='32' filepath='stdint-intn.h' line='26' column='1' hash='09d17c08f594edc7' id='type-id-29'/>
+    <typedef-decl name='psmsgr_state_desc' type-id='type-id-20' size-in-bits='128' filepath='state.h' line='57' column='1' id='type-id-30'/>
+    <typedef-decl name='psmsgr_state_info' type-id='type-id-21' size-in-bits='192' filepath='state.h' line='48' column='1' id='type-id-31'/>
+    <typedef-decl name='psmsgr_state_options' type-id='type-id-22' size-in-bits='224' filepath='state.h' line='39' column='1' id='type-id-32'/>
+    <typedef-decl name='size_t' type-id='type-id-4' size-in-bits='32' filepath='stddef.h' line='214' column='1' hash='e66b43f97c38e87a' id='type-id-33'/>
+    <typedef-decl name='ssize_t' type-id='type-id-28' size-in-bits='32' filepath='stdio.h' line='78' column='1' hash='09d17c08f594edc7' id='type-id-34'/>
+    <pointer-type-def type-id='type-id-1' size-in-bits='32' hash='6812f8e849bfc813' id='type-id-35'/>
+    <qualified-type-def type-id='type-id-12' restrict='yes' hash='f0170b4d7cd05be3' id='type-id-36'/>
+    <qualified-type-def type-id='type-id-32' const='yes' hash='731386a3f4a4b6fa' id='type-id-37'/>
+    <pointer-type-def type-id='type-id-37' size-in-bits='32' hash='3ef75c7a347d26c9' id='type-id-38'/>
+    <pointer-type-def type-id='type-id-2' size-in-bits='32' hash='e51b662ac2a28f93' id='type-id-39'/>
+    <pointer-type-def type-id='type-id-30' size-in-bits='32' hash='dd7224f0d2ae9691' id='type-id-40'/>
+    <pointer-type-def type-id='type-id-31' size-in-bits='32' hash='c14efe891e67c086' id='type-id-41'/>
+    <pointer-type-def type-id='type-id-32' size-in-bits='32' hash='279c65b47d3f8408' id='type-id-42'/>
+    <pointer-type-def type-id='type-id-9' size-in-bits='32' hash='16946e7097b32856' id='type-id-43'/>
+    <pointer-type-def type-id='type-id-16' size-in-bits='32' hash='7f3fe83f3743e59d' id='type-id-44'/>
+    <pointer-type-def type-id='type-id-45' size-in-bits='32' hash='a83053b3d664bbb3' id='type-id-46'/>
+    <pointer-type-def type-id='type-id-47' size-in-bits='32' id='type-id-48'/>
+    <qualified-type-def type-id='type-id-49' const='yes' id='type-id-50'/>
+    <pointer-type-def type-id='type-id-50' size-in-bits='32' id='type-id-51'/>
+    <qualified-type-def type-id='type-id-14' const='yes' id='type-id-52'/>
+    <pointer-type-def type-id='type-id-52' size-in-bits='32' id='type-id-53'/>
+    <pointer-type-def type-id='type-id-54' size-in-bits='32' id='type-id-55'/>
+    <function-decl name='__builtin___memcpy_chk' mangled-name='__memcpy_chk' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='__memcpy_chk' hash='28f93d42079c2801'>
+      <return type-id='type-id-13'/>
+    </function-decl>
+    <function-decl name='__builtin_memset' mangled-name='memset' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='memset' hash='28f93d42079c2801'>
+      <return type-id='type-id-13'/>
+    </function-decl>
+    <pointer-type-def type-id='type-id-56' size-in-bits='32' id='type-id-57'/>
+    <pointer-type-def type-id='type-id-57' size-in-bits='32' id='type-id-58'/>
+    <pointer-type-def type-id='type-id-49' size-in-bits='32' id='type-id-59'/>
+    <pointer-type-def type-id='type-id-59' size-in-bits='32' id='type-id-60'/>
+    <pointer-type-def type-id='type-id-61' size-in-bits='32' id='type-id-62'/>
+    <qualified-type-def type-id='type-id-62' restrict='yes' id='type-id-63'/>
+    <class-decl name='__dirstream' is-struct='yes' visibility='default' is-declaration-only='yes' id='type-id-64'/>
+    <pointer-type-def type-id='type-id-14' size-in-bits='32' id='type-id-65'/>
+    <typedef-decl name='psmsgr_state_writer' type-id='type-id-66' filepath='state.h' line='19' column='1' id='type-id-49'/>
+    <typedef-decl name='psmsgr_state_reader' type-id='type-id-67' filepath='state.h' line='20' column='1' id='type-id-56'/>
+    <var-decl name='psmi_test_lock_opened' type-id='type-id-44' visibility='default' filepath='internal.h' line='68' column='1'/>
+    <var-decl name='psmi_test_skip_seq_recheck' type-id='type-id-17' visibility='default' filepath='internal.h' line='73' column='1'/>
+    <function-decl name='psmsgr_state_options_init_sized' mangled-name='psmsgr_state_options_init_sized' filepath='state.c' line='283' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_state_options_init_sized@@PSMSGR_1' hash='1d03579b35e63cae'>
+      <parameter type-id='type-id-42' name='opt' filepath='state.c' line='283' column='1'/>
+      <parameter type-id='type-id-9' name='size' filepath='state.c' line='283' column='1'/>
+      <return type-id='type-id-13'/>
+    </function-decl>
+    <class-decl name='psmsgr_state_writer' is-struct='yes' visibility='default' is-declaration-only='yes' filepath='state.c' line='334' column='1' id='type-id-66'/>
+    <function-decl name='psmsgr_state_writer_open' mangled-name='psmsgr_state_writer_open' filepath='state.c' line='536' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_state_writer_open@@PSMSGR_1' hash='968ad335af59d479'>
+      <parameter type-id='type-id-12' name='name' filepath='state.c' line='536' column='1'/>
+      <parameter type-id='type-id-38' name='opt' filepath='state.c' line='536' column='1'/>
+      <parameter type-id='type-id-60' name='out' filepath='state.c' line='537' column='1'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='psmsgr_state_writer_close' mangled-name='psmsgr_state_writer_close' filepath='state.c' line='577' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_state_writer_close@@PSMSGR_1' hash='28f93d42079c2801'>
+      <parameter type-id='type-id-59' name='w' filepath='state.c' line='577' column='1'/>
+      <return type-id='type-id-13'/>
+    </function-decl>
+    <function-decl name='psmsgr_state_writer_capacity' mangled-name='psmsgr_state_writer_capacity' filepath='state.c' line='587' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_state_writer_capacity@@PSMSGR_1' hash='9d519c215ecaff9e'>
+      <parameter type-id='type-id-51' name='w' filepath='state.c' line='587' column='1'/>
+      <return type-id='type-id-9'/>
+    </function-decl>
+    <function-decl name='psmsgr_state_publish' mangled-name='psmsgr_state_publish' filepath='state.c' line='632' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_state_publish@@PSMSGR_1' hash='fdf678145062ada2'>
+      <parameter type-id='type-id-59' name='w' filepath='state.c' line='632' column='1'/>
+      <parameter type-id='type-id-45' name='data' filepath='state.c' line='632' column='1'/>
+      <parameter type-id='type-id-9' name='len' filepath='state.c' line='632' column='1'/>
+      <parameter type-id='type-id-43' name='generation' filepath='state.c' line='633' column='1'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='psmsgr_state_begin' mangled-name='psmsgr_state_begin' filepath='state.c' line='648' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_state_begin@@PSMSGR_1' hash='af4930f3572cfb75'>
+      <parameter type-id='type-id-59' name='w' filepath='state.c' line='648' column='1'/>
+      <parameter type-id='type-id-46' name='buf' filepath='state.c' line='648' column='1'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='psmsgr_state_commit' mangled-name='psmsgr_state_commit' filepath='state.c' line='658' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_state_commit@@PSMSGR_1' hash='fdf678145062ada2'>
+      <parameter type-id='type-id-59' name='w' filepath='state.c' line='658' column='1'/>
+      <parameter type-id='type-id-9' name='len' filepath='state.c' line='658' column='1'/>
+      <parameter type-id='type-id-43' name='generation' filepath='state.c' line='658' column='1'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='psmsgr_state_abort' mangled-name='psmsgr_state_abort' filepath='state.c' line='672' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_state_abort@@PSMSGR_1' hash='618a43b787306f94'>
+      <parameter type-id='type-id-59' name='w' filepath='state.c' line='672' column='1'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <class-decl name='psmsgr_state_reader' is-struct='yes' visibility='default' is-declaration-only='yes' filepath='state.c' line='687' column='1' id='type-id-67'/>
+    <function-decl name='psmsgr_state_reader_open' mangled-name='psmsgr_state_reader_open' filepath='state.c' line='701' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_state_reader_open@@PSMSGR_1' hash='e2772a300aea4a7f'>
+      <parameter type-id='type-id-12' name='name' filepath='state.c' line='701' column='1'/>
+      <parameter type-id='type-id-12' name='dir' filepath='state.c' line='701' column='1'/>
+      <parameter type-id='type-id-58' name='out' filepath='state.c' line='701' column='1'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='psmsgr_state_reader_close' mangled-name='psmsgr_state_reader_close' filepath='state.c' line='726' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_state_reader_close@@PSMSGR_1' hash='28f93d42079c2801'>
+      <parameter type-id='type-id-57' name='r' filepath='state.c' line='726' column='1'/>
+      <return type-id='type-id-13'/>
+    </function-decl>
+    <function-decl name='psmsgr_state_read' mangled-name='psmsgr_state_read' filepath='state.c' line='862' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_state_read@@PSMSGR_1' hash='5e1285a15a33fc17'>
+      <parameter type-id='type-id-57' name='r' filepath='state.c' line='862' column='1'/>
+      <parameter type-id='type-id-45' name='buf' filepath='state.c' line='862' column='1'/>
+      <parameter type-id='type-id-9' name='size' filepath='state.c' line='862' column='1'/>
+      <parameter type-id='type-id-41' name='info' filepath='state.c' line='862' column='1'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='psmsgr_state_peek' mangled-name='psmsgr_state_peek' filepath='state.c' line='875' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_state_peek@@PSMSGR_1' hash='bc84836a0fe57178'>
+      <parameter type-id='type-id-57' name='r' filepath='state.c' line='875' column='1'/>
+      <parameter type-id='type-id-41' name='info' filepath='state.c' line='875' column='1'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='psmsgr_state_describe_sized' mangled-name='psmsgr_state_describe_sized' filepath='state.c' line='888' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_state_describe_sized@@PSMSGR_1' hash='ac62882dafda7f73'>
+      <parameter type-id='type-id-57' name='r' filepath='state.c' line='888' column='1'/>
+      <parameter type-id='type-id-40' name='desc' filepath='state.c' line='888' column='1'/>
+      <parameter type-id='type-id-9' name='size' filepath='state.c' line='888' column='1'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='psmsgr_state_wait' mangled-name='psmsgr_state_wait' filepath='state.c' line='942' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_state_wait@@PSMSGR_1' hash='cff3b705d0bf6cf6'>
+      <parameter type-id='type-id-57' name='r' filepath='state.c' line='942' column='1'/>
+      <parameter type-id='type-id-9' name='last_generation' filepath='state.c' line='942' column='1'/>
+      <parameter type-id='type-id-29' name='timeout_ms' filepath='state.c' line='942' column='1'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='psmsgr_state_writer_alive' mangled-name='psmsgr_state_writer_alive' filepath='state.c' line='981' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_state_writer_alive@@PSMSGR_1' hash='618a43b787306f94'>
+      <parameter type-id='type-id-57' name='r' filepath='state.c' line='981' column='1'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='psmsgr_state_unlink' mangled-name='psmsgr_state_unlink' filepath='state.c' line='1005' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_state_unlink@@PSMSGR_1' hash='e2772a300aea4a7f'>
+      <parameter type-id='type-id-12'/>
+      <parameter type-id='type-id-12'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <class-decl name='dirent' is-struct='yes' visibility='default' is-declaration-only='yes' filepath='dirent.h' line='22' column='1' id='type-id-54'/>
+    <function-decl name='__open_alias' mangled-name='open64' filepath='fcntl2.h' line='32' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='open64' hash='ff43e049b7151373'>
+      <parameter type-id='type-id-12'/>
+      <parameter type-id='type-id-2'/>
+      <parameter is-variadic='yes'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <class-decl name='stat' is-struct='yes' visibility='default' is-declaration-only='yes' filepath='struct_stat.h' line='29' column='1' id='type-id-61'/>
+    <function-decl name='__pread64_alias' mangled-name='pread64' filepath='unistd-decl.h' line='49' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='pread64' hash='63305eeb256d8b98'>
+      <parameter type-id='type-id-2'/>
+      <parameter type-id='type-id-45'/>
+      <parameter type-id='type-id-33'/>
+      <parameter type-id='type-id-26'/>
+      <return type-id='type-id-34'/>
+    </function-decl>
+    <typedef-decl name='DIR' type-id='type-id-64' filepath='dirent.h' line='127' column='1' id='type-id-47'/>
+    <function-decl name='closedir' filepath='dirent.h' line='134' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='closedir' hash='618a43b787306f94'>
+      <parameter type-id='type-id-48'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='opendir' filepath='dirent.h' line='141' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='opendir' hash='d5f56f00ca1d8a09'>
+      <parameter type-id='type-id-12'/>
+      <return type-id='type-id-48'/>
+    </function-decl>
+    <function-decl name='readdir' mangled-name='readdir64' filepath='dirent.h' line='167' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='readdir64' hash='28f93d42079c2801'>
+      <parameter type-id='type-id-48'/>
+      <return type-id='type-id-55'/>
+    </function-decl>
+    <function-decl name='dirfd' filepath='dirent.h' line='226' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='dirfd' hash='618a43b787306f94'>
+      <parameter type-id='type-id-48'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='__errno_location' filepath='errno.h' line='37' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='__errno_location' hash='cdc7687fc3742848'>
+      <return type-id='type-id-39'/>
+    </function-decl>
+    <function-decl name='fcntl' mangled-name='__fcntl_time64' filepath='fcntl.h' line='190' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='__fcntl_time64' hash='780e68445c0461fa'>
+      <parameter type-id='type-id-2'/>
+      <parameter type-id='type-id-2'/>
+      <parameter is-variadic='yes'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='posix_fallocate' mangled-name='posix_fallocate64' filepath='fcntl.h' line='326' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='posix_fallocate64' hash='f7f4f5d64d6d7ba4'>
+      <parameter type-id='type-id-2'/>
+      <parameter type-id='type-id-26'/>
+      <parameter type-id='type-id-26'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='sched_yield' filepath='sched.h' line='68' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='sched_yield' hash='618a43b787306f94'>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='rename' filepath='stdio.h' line='160' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='rename' hash='e2772a300aea4a7f'>
+      <parameter type-id='type-id-12'/>
+      <parameter type-id='type-id-12'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='malloc' filepath='stdlib.h' line='672' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='malloc' hash='9d519c215ecaff9e'>
+      <parameter type-id='type-id-4'/>
+      <return type-id='type-id-45'/>
+    </function-decl>
+    <function-decl name='calloc' filepath='stdlib.h' line='675' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='calloc' hash='0a9372bc585990af'>
+      <parameter type-id='type-id-4'/>
+      <parameter type-id='type-id-4'/>
+      <return type-id='type-id-45'/>
+    </function-decl>
+    <function-decl name='free' filepath='stdlib.h' line='687' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='free' hash='28f93d42079c2801'>
+      <parameter type-id='type-id-45'/>
+      <return type-id='type-id-13'/>
+    </function-decl>
+    <function-decl name='getenv' filepath='stdlib.h' line='773' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='getenv' hash='c863e1585fcf34b9'>
+      <parameter type-id='type-id-12'/>
+      <return type-id='type-id-35'/>
+    </function-decl>
+    <function-decl name='mkostemp' mangled-name='mkostemp64' filepath='stdlib.h' line='884' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='mkostemp64' hash='a10de2d8ba97d6f2'>
+      <parameter type-id='type-id-35'/>
+      <parameter type-id='type-id-2'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='strncmp' filepath='string.h' line='159' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='strncmp' hash='ca584fbb02b381e2'>
+      <parameter type-id='type-id-12'/>
+      <parameter type-id='type-id-12'/>
+      <parameter type-id='type-id-4'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='strchr' filepath='string.h' line='246' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='strchr' hash='baf1dcac80ad52cb'>
+      <parameter type-id='type-id-12'/>
+      <parameter type-id='type-id-2'/>
+      <return type-id='type-id-35'/>
+    </function-decl>
+    <function-decl name='strlen' filepath='string.h' line='407' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='strlen' hash='feddc95f4ac57595'>
+      <parameter type-id='type-id-12'/>
+      <return type-id='type-id-33'/>
+    </function-decl>
+    <function-decl name='mmap' mangled-name='mmap64' filepath='mman.h' line='61' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='mmap64' hash='45f7c6f3b52e917d'>
+      <parameter type-id='type-id-45'/>
+      <parameter type-id='type-id-33'/>
+      <parameter type-id='type-id-2'/>
+      <parameter type-id='type-id-2'/>
+      <parameter type-id='type-id-2'/>
+      <parameter type-id='type-id-26'/>
+      <return type-id='type-id-45'/>
+    </function-decl>
+    <function-decl name='munmap' filepath='mman.h' line='76' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='munmap' hash='5fc97b5a3ea65c0e'>
+      <parameter type-id='type-id-45'/>
+      <parameter type-id='type-id-33'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='getrandom' filepath='random.h' line='34' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='getrandom' hash='2f0344fde322d55f'>
+      <parameter type-id='type-id-45'/>
+      <parameter type-id='type-id-33'/>
+      <parameter type-id='type-id-4'/>
+      <return type-id='type-id-34'/>
+    </function-decl>
+    <function-decl name='fstat' mangled-name='__fstat64_time64' filepath='stat.h' line='218' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='__fstat64_time64' hash='7b7729906ef766be'>
+      <parameter type-id='type-id-2'/>
+      <parameter type-id='type-id-62'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='lstat' mangled-name='__lstat64_time64' filepath='stat.h' line='318' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='__lstat64_time64' hash='60aa7c2061d13db1'>
+      <parameter type-id='type-id-36'/>
+      <parameter type-id='type-id-63'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='fchmod' filepath='stat.h' line='365' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='fchmod' hash='11c83c90df91b473'>
+      <parameter type-id='type-id-2'/>
+      <parameter type-id='type-id-25'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='clock_nanosleep' mangled-name='__clock_nanosleep_time64' filepath='time.h' line='328' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='__clock_nanosleep_time64' hash='780e68445c0461fa'>
+      <parameter type-id='type-id-8'/>
+      <parameter type-id='type-id-2'/>
+      <parameter type-id='type-id-53'/>
+      <parameter type-id='type-id-65'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='close' filepath='unistd.h' line='358' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='close' hash='7b7729906ef766be'>
+      <parameter type-id='type-id-2'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='getpid' filepath='unistd.h' line='650' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='getpid' hash='618a43b787306f94'>
+      <return type-id='type-id-27'/>
+    </function-decl>
+    <function-decl name='unlink' filepath='unistd.h' line='858' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='unlink' hash='1115245da7b4112e'>
+      <parameter type-id='type-id-12'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='unlinkat' filepath='unistd.h' line='862' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='unlinkat' hash='d9040070ed60d516'>
+      <parameter type-id='type-id-2'/>
+      <parameter type-id='type-id-12'/>
+      <parameter type-id='type-id-2'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='syscall' filepath='unistd.h' line='1091' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='syscall' hash='83dd0b10b2bd22af'>
+      <parameter type-id='type-id-18'/>
+      <parameter is-variadic='yes'/>
+      <return type-id='type-id-18'/>
+    </function-decl>
+    <type-decl name='variadic parameter type' id='type-id-68'/>
+    <pointer-type-def type-id='type-id-13' id='type-id-45'/>
+  </abi-instr>
+  <abi-instr address-size='32' path='waitset.c' language='LANG_C11'>
+    <class-decl name='psmsgr_waitset_event' is-struct='yes' visibility='default' size-in-bits='192' filepath='waitset.h' line='28' column='1' hash='cd864b13432d9331' id='type-id-69'>
+      <data-member access='public' layout-offset-in-bits='0'>
+        <var-decl name='token' type-id='type-id-10' visibility='default' filepath='waitset.h' line='29' column='1'/>
+      </data-member>
+      <data-member access='public' layout-offset-in-bits='64'>
+        <var-decl name='status' type-id='type-id-29' visibility='default' filepath='waitset.h' line='30' column='1'/>
+      </data-member>
+      <data-member access='public' layout-offset-in-bits='96'>
+        <var-decl name='generation' type-id='type-id-9' visibility='default' filepath='waitset.h' line='32' column='1'/>
+      </data-member>
+      <data-member access='public' layout-offset-in-bits='128'>
+        <var-decl name='sys_errno' type-id='type-id-29' visibility='default' filepath='waitset.h' line='33' column='1'/>
+      </data-member>
+      <data-member access='public' layout-offset-in-bits='160'>
+        <var-decl name='reserved' type-id='type-id-9' visibility='default' filepath='waitset.h' line='34' column='1'/>
+      </data-member>
+    </class-decl>
+    <typedef-decl name='psmsgr_waitset_event' type-id='type-id-69' size-in-bits='192' filepath='waitset.h' line='35' column='1' id='type-id-70'/>
+    <qualified-type-def type-id='type-id-9' const='yes' hash='c615287ae67f9bdd' id='type-id-71'/>
+    <pointer-type-def type-id='type-id-71' size-in-bits='32' hash='838bbfa9253a0277' id='type-id-72'/>
+    <pointer-type-def type-id='type-id-72' size-in-bits='32' hash='3d30ca547357d915' id='type-id-73'/>
+    <pointer-type-def type-id='type-id-70' size-in-bits='32' hash='9fa58d4dcbf39c18' id='type-id-74'/>
+    <function-decl name='__builtin_memmove' mangled-name='memmove' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='memmove' hash='28f93d42079c2801'>
+      <return type-id='type-id-13'/>
+    </function-decl>
+    <pointer-type-def type-id='type-id-75' size-in-bits='32' id='type-id-76'/>
+    <pointer-type-def type-id='type-id-77' size-in-bits='32' id='type-id-78'/>
+    <pointer-type-def type-id='type-id-78' size-in-bits='32' id='type-id-79'/>
+    <class-decl name='psmsgr_state_reader' is-struct='yes' visibility='default' is-declaration-only='yes' id='type-id-80'/>
+    <pointer-type-def type-id='type-id-14' size-in-bits='32' id='type-id-81'/>
+    <typedef-decl name='psmsgr_state_reader' type-id='type-id-80' filepath='state.h' line='20' column='1' id='type-id-75'/>
+    <typedef-decl name='psmsgr_waitset' type-id='type-id-82' filepath='waitset.h' line='25' column='1' id='type-id-77'/>
+    <var-decl name='psmi_test_waitv_enosys' type-id='type-id-17' visibility='default' filepath='internal.h' line='76' column='1'/>
+    <class-decl name='psmsgr_waitset' is-struct='yes' visibility='default' is-declaration-only='yes' filepath='waitset.c' line='34' column='1' id='type-id-82'/>
+    <function-decl name='psmsgr_waitset_open' mangled-name='psmsgr_waitset_open' filepath='waitset.c' line='114' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_waitset_open@@PSMSGR_1.1' hash='618a43b787306f94'>
+      <parameter type-id='type-id-79' name='out' filepath='waitset.c' line='114' column='1'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='psmsgr_waitset_close' mangled-name='psmsgr_waitset_close' filepath='waitset.c' line='136' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_waitset_close@@PSMSGR_1.1' hash='28f93d42079c2801'>
+      <parameter type-id='type-id-78' name='ws' filepath='waitset.c' line='196' column='1'/>
+      <return type-id='type-id-13'/>
+    </function-decl>
+    <function-decl name='psmsgr_waitset_add' mangled-name='psmsgr_waitset_add' filepath='waitset.c' line='149' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_waitset_add@@PSMSGR_1.1' hash='9839a6a8e0e37988'>
+      <parameter type-id='type-id-78' name='ws' filepath='waitset.c' line='149' column='1'/>
+      <parameter type-id='type-id-76' name='r' filepath='waitset.c' line='149' column='1'/>
+      <parameter type-id='type-id-9' name='last_generation' filepath='waitset.c' line='149' column='1'/>
+      <parameter type-id='type-id-10' name='token' filepath='waitset.c' line='150' column='1'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='psmsgr_waitset_remove' mangled-name='psmsgr_waitset_remove' filepath='waitset.c' line='170' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_waitset_remove@@PSMSGR_1.1' hash='618a43b787306f94'>
+      <parameter type-id='type-id-78' name='ws' filepath='waitset.c' line='170' column='1'/>
+      <parameter type-id='type-id-76' name='r' filepath='waitset.c' line='170' column='1'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+    <function-decl name='psmsgr_waitset_wake' mangled-name='psmsgr_waitset_wake' filepath='waitset.c' line='196' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_waitset_wake@@PSMSGR_1.1' hash='28f93d42079c2801'>
+      <parameter type-id='type-id-78' name='ws' filepath='waitset.c' line='196' column='1'/>
+      <return type-id='type-id-13'/>
+    </function-decl>
+    <function-decl name='psmsgr_waitset_wait' mangled-name='psmsgr_waitset_wait' filepath='waitset.c' line='275' column='1' visibility='default' binding='global' size-in-bits='32' elf-symbol-id='psmsgr_waitset_wait@@PSMSGR_1.1' hash='4886ad8da981ed31'>
+      <parameter type-id='type-id-78' name='ws' filepath='waitset.c' line='275' column='1'/>
+      <parameter type-id='type-id-29' name='timeout_ms' filepath='waitset.c' line='275' column='1'/>
+      <parameter type-id='type-id-74' name='events' filepath='waitset.c' line='275' column='1'/>
+      <parameter type-id='type-id-9' name='cap' filepath='waitset.c' line='276' column='1'/>
+      <parameter type-id='type-id-43' name='n' filepath='waitset.c' line='276' column='1'/>
+      <return type-id='type-id-2'/>
+    </function-decl>
+  </abi-instr>
+</abi-corpus>
