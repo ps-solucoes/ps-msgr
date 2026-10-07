@@ -93,7 +93,10 @@ publishing for the BeagleBone Black.
   readers completes the tasks (libpsmsgr waitsets, Linux 5.16; older
   kernels get a thread per wait). Until the task completes, the reader
   belongs to it: other calls throw `InvalidOperationException`, except
-  `Dispose`, which ends the wait with `ObjectDisposedException`.
+  `Dispose`, which ends the wait with `ObjectDisposedException`. A value
+  that changed already gives a completed task, so a read/await loop does
+  not yield while the writer stays ahead: add `await Task.Yield()` where
+  other work must run in between.
 - Channels live in `/dev/shm` unless `StateOptions.Directory` (or the
   `directory` argument) or `$PSMSGR_DIR` says otherwise.
 - Errors throw `PsMsgrException` (an `IOException`); `Code` is the library's
