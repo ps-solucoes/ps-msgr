@@ -210,7 +210,10 @@ public sealed unsafe class StateReader : IDisposable
     /// <see cref="Wait"/> without blocking a thread: the task completes with true when the
     /// generation differs from <paramref name="lastGeneration"/>, false on timeout. The
     /// timeout means the same as for <see cref="Wait"/>; <see cref="TimeSpan.Zero"/> polls
-    /// once and returns a completed task. A cancellation cancels the task, and a
+    /// once. When the generation already differs, or the timeout is zero, the task is
+    /// returned completed: a loop that awaits it does not yield while the writer stays
+    /// ahead, so a loop that must let others run awaits <see cref="Task.Yield"/> too. A
+    /// cancellation cancels the task, and a
     /// <see cref="Dispose"/> from another thread faults it with
     /// <see cref="ObjectDisposedException"/>, both at once (within 100 ms where the kernel
     /// lacks <c>futex_waitv</c>), but each takes the reader out of its waitset on the calling

@@ -387,7 +387,11 @@ public enum PsMsgrError { Inval = -1, Sys = -2, NoData = -3, TooSmall = -4, TooB
   (c-api.md):
   - It first checks once on the calling thread, like `Wait` with
     `TimeSpan.Zero`: a changed value or a zero timeout gives a completed
-    task, an error a faulted one. Otherwise it registers the reader with a
+    task, an error a faulted one. Awaiting a completed task does not
+    yield, so a loop of read and `await WaitAsync` runs without yielding
+    while the writer stays ahead of it; a loop that must let others run
+    (e.g. loops started in turn by one method) awaits `Task.Yield()` too.
+    Otherwise it registers the reader with a
     waitset, and the event completes the task: `true`, or a fault with the
     `PsMsgrException` that `Wait` throws for the event's status (`NotSup`,
     `Format`, `Sys` with its `errno`).
