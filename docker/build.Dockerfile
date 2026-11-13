@@ -53,8 +53,8 @@ RUN dpkg --add-architecture armhf \
 # zlib1g-dev (above) is what Native AOT links against, with clang.
 ADD --checksum=sha256:d45224d594d969f084232deaaf97c58ca502a9d964c362d7aaef5a76e16b3dd1 \
     https://packages.microsoft.com/keys/microsoft-2025.asc /usr/share/keyrings/microsoft-2025.asc
-ARG DOTNET_SDK_VERSION=10.0.401-1
-ARG DOTNET_RUNTIME_VERSION=10.0.12-1
+ARG DOTNET_SDK_VERSION=10.0.404-1
+ARG DOTNET_RUNTIME_VERSION=10.0.15-1
 RUN chmod 644 /usr/share/keyrings/microsoft-2025.asc \
  && echo "deb [signed-by=/usr/share/keyrings/microsoft-2025.asc] https://packages.microsoft.com/debian/13/prod trixie main" \
         > /etc/apt/sources.list.d/microsoft-prod.list \
