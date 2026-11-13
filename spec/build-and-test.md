@@ -88,7 +88,9 @@ the same image.
     against its SHA-256 and the SDK and runtime packages pinned. Mono is
     not included (bindings.md).
 - **Two targets:**
-  - host (x86-64 or AArch64, for development and CI)
+  - host (x86-64 or AArch64, for development and CI). The `release`
+    preset built natively on each is what ships for amd64 and arm64:
+    arm64 is built on an AArch64 CI runner, not cross-compiled.
   - `armhf` (BeagleBone Black), cross-compiled with Debian's
     `arm-linux-gnueabihf-gcc`
 - **Code generation:** keep Debian armhf's defaults (ARMv7-A, Thumb-2,
@@ -159,14 +161,20 @@ the library get correct package dependencies.
   be `libpsmsgr.so.<major>`.
 - **ABI snapshots** (`abi/`): `abi_check` doesn't see struct layouts, so
   each release records its public ABI, types and layouts included, per
-  architecture. After the `release` and `armhf-release` builds:
+  architecture. After the `release` (amd64 and arm64) and `armhf-release`
+  builds:
 
   ```
   abidw --headers-dir include/psmsgr --drop-private-types --no-corpus-path \
         --no-comp-dir-path --short-locs \
-        --out-file abi/libpsmsgr-<version>-<amd64|armhf>.abi \
+        --out-file abi/libpsmsgr-<version>-<amd64|arm64|armhf>.abi \
         build/<release|armhf-release>/libpsmsgr.so.<version>
   ```
+
+  The arm64 snapshot comes from a native AArch64 build: on an x86-64
+  machine, run the build container (or `debian:trixie` with the compiler,
+  CMake, Ninja and `abigail-tools`) with `--platform linux/arm64` under
+  qemu binfmt.
 
   A later build is compared against the last release's snapshot for the
   same architecture:
@@ -197,12 +205,14 @@ the library get correct package dependencies.
   | `PSMSGR_BUILD_EXAMPLES` | `OFF` | Build the C examples (`examples/c`), not installed or packaged. `dev`, `dev-clang`, `release` and `armhf-release` turn it on. |
   | `PSMSGR_SANITIZE` | empty | Sanitizer to enable: `address`, `undefined` or `thread`. |
 
-- Packaging: CPack DEB for `armhf` and `amd64`, built in the trixie
-  container, produces `libpsmsgr1`, `libpsmsgr-dev` and `psmsgr-tools`,
-  each with its `/usr/share/doc/<package>/copyright` (machine-readable
-  format, Apache-2.0). A plain `cmake --install` installs these three
-  files too.
-  Installing the `.deb` is the supported deployment path on the BBB.
+- Packaging: CPack DEB for `armhf`, `amd64` and `arm64`, built in the
+  trixie container, produces `libpsmsgr1`, `libpsmsgr-dev` and
+  `psmsgr-tools`, each with its `/usr/share/doc/<package>/copyright`
+  (machine-readable format, Apache-2.0). A plain `cmake --install`
+  installs these three files too. The `release` preset's package is
+  native: amd64 on x86-64, arm64 on AArch64.
+  Installing the `.deb` is the supported deployment path on the BBB and
+  on arm64 boxes.
   Package dependencies come from `dpkg-shlibdeps` (the container has
   `libc6:armhf` via multiarch for that) and are therefore trixie's.
 
@@ -478,16 +488,19 @@ works with any reader. `examples/check.sh [build-dir]` (default
 | C# (x86-64) | `release` preset, then `bindings/csharp/check.sh`: binding tests on .NET LTS, `dotnet format`, the Native AOT smoke below, and the `.nupkg` as an artifact. |
 | Interop (x86-64) | `release` preset, then `interop/check.sh`: the cross-language suite with the C agent, the Python agent on the installed wheel and the C# agent published with Native AOT for linux-x64, then ruff and `dotnet format`. Then `examples/check.sh` (see *Examples*). |
 | C# Native AOT (in the C# job) | `dotnet publish` of `PsMsgr.AotSmoke` (`PublishAot=true`) with `TrimmerSingleWarn=false` (per-warning detail for library code) and IL2xxx/IL3xxx as errors (`TreatWarningsAsErrors`). Publish-time analysis only covers code the app reaches, so the smoke app MUST call every public API, including the generic helpers with a sample struct. Builds for linux-x64 and runs it. |
-| CPack | Build the `.deb` for armhf and amd64. |
+| CPack | Build the `.deb` for armhf, amd64 and arm64 (in the AArch64 job), each kept as an artifact. |
 
 ## Releases
 
 Pushing a `v<version>` tag runs `.github/workflows/release.yml` (it can
 also be run by hand for an existing tag). In the build container it runs
 the `release` and `armhf-release` workflow presets, `bindings/csharp/check.sh`
-and builds the Python wheel, then creates the GitHub release for the tag:
-its notes are the tag's section of `CHANGELOG.md`, and it carries the
-`.deb` packages for amd64 and armhf, the `.nupkg` and the `.whl`. The Go
+and builds the Python wheel. A second job runs the `release` workflow
+preset on an AArch64 runner (`ubuntu-24.04-arm`) for the arm64 `.deb`
+packages, tests included. The first job then creates the GitHub release
+for the tag: its notes are the tag's section of `CHANGELOG.md`, and it
+carries the `.deb` packages for amd64, arm64 and armhf, the `.nupkg` and
+the `.whl`. The Go
 binding is released by its own `bindings/go/v<version>` tag, from which
 `go get` fetches it.
 
@@ -512,3 +525,7 @@ baseline the next run compares against. There are no numeric targets yet; the cu
 
 CI builds `psmsgr-bench` (in `dev`, `dev-clang` and `armhf-release`) but
 never runs it: numbers from x86 or qemu mean nothing.
+
+There is no on-target step for arm64 boxes: the AArch64 CI job (torture
+test for 10 s per variant, bindings, interop, examples on real AArch64
+hardware) is their release gate.
