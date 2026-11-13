@@ -7,6 +7,20 @@ as described in [`spec/README.md`](spec/README.md).
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-11-13
+
+Library 1.1.2, with no change from 1.1.1, now also packaged for arm64; the
+bindings `ps_msgr` (Python) and `PsMsgr` (C#) 1.1.2, unchanged. The Go
+binding is unchanged.
+
+### Added
+
+- arm64 `.deb` packages (`libpsmsgr1`, `libpsmsgr-dev`, `psmsgr-tools`)
+  for Debian trixie, built and tested natively on an AArch64 runner and
+  attached to the release next to the amd64 and armhf ones.
+- `abi/`: `abidw` snapshots of the 1.1.2 public ABI for amd64, armhf and,
+  for the first time, arm64.
+
 ## [1.1.1] - 2026-10-07
 
 Library 1.1.1, with no change from 1.1.0; the bindings `ps_msgr` (Python)

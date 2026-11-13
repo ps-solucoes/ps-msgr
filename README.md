@@ -17,7 +17,8 @@ writer to many readers through a shared-memory file in `/dev/shm`:
 Status: the C library with state channels, `psmsgr-dump`, `psmsgr-bench`,
 the Python binding and the C# binding are implemented and tested with the
 CI presets in the build container (x86-64, armhf under qemu); the CI
-workflow, which adds arm64, has not run for this release. On a BeagleBone
+workflow, which adds arm64, has not run for this release. Releases ship
+`.deb` packages for amd64, arm64 and armhf (Debian trixie). On a BeagleBone
 Black, the C library passed the torture test and was benchmarked
 ([`bench/results/2026-09-25-bbb-adea019/`](bench/results/2026-09-25-bbb-adea019/)),
 and the bindings, the interop suite and the examples ran, with one
@@ -48,6 +49,7 @@ a command in it with the repository mounted:
 
 ```sh
 docker/run.sh cmake --workflow --preset dev            # host: debug, ASan+UBSan, tests
+docker/run.sh cmake --workflow --preset release        # host .debs (amd64, or arm64 on an AArch64 host)
 PSMSGR_NO_ASLR=1 docker/run.sh cmake --workflow --preset tsan  # ThreadSanitizer (needs ASLR off)
 docker/run.sh cmake --workflow --preset armhf          # BeagleBone Black: tests under qemu
 docker/run.sh cmake --workflow --preset armhf-release  # + libpsmsgr1, -dev and psmsgr-tools .debs

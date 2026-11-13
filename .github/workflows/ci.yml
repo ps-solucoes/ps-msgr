@@ -210,6 +210,13 @@ jobs:
       # CTest shows a test's output only when it fails. Print the counters
       # of the run above from CTest's log instead of running the torture
       # test (70 s here) again. grep fails the step if the section is gone.
+      - name: Upload packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: deb-release-arm64
+          path: build/release/*.deb
+          if-no-files-found: error
+
       - name: Torture test counters
         run: >-
           sed -n '/ Test: test_torture$/,/^"test_torture" end time/p'

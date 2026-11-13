@@ -17,8 +17,38 @@ env:
   TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
+  # The arm64 packages are built natively, as CI tests them.
+  debs-arm64:
+    name: debs (arm64)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.TAG }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build container
+        uses: docker/build-push-action@v7
+        with:
+          context: docker
+          file: docker/build.Dockerfile
+          tags: psmsgr-build
+          load: true
+          cache-from: type=gha,scope=psmsgr-build-arm64
+
+      - name: Debian packages (arm64)
+        run: docker/run.sh cmake --workflow --preset release
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: deb-arm64
+          path: build/release/*.deb
+          if-no-files-found: error
+
   release:
     name: release
+    needs: debs-arm64
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -52,6 +82,11 @@ jobs:
           python3 -m pip wheel --quiet --no-deps --no-build-isolation
           --wheel-dir build/release/python "$HOME/python"'
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: deb-arm64
+          path: build/arm64
+
       - name: Release notes from CHANGELOG.md
         run: |
           awk -v v="${TAG#v}" '/^## \[/ { p = index($0, "## [" v "]") == 1; next } p' \
@@ -64,5 +99,5 @@ jobs:
         run: |
           gh release create "$TAG" --verify-tag --title "$TAG" \
               --notes-file "$RUNNER_TEMP/notes.md" \
-              build/release/*.deb build/armhf-release/*.deb \
+              build/release/*.deb build/arm64/*.deb build/armhf-release/*.deb \
               build/release/csharp/nupkg/*.nupkg build/release/python/*.whl

@@ -18,9 +18,10 @@ RFC 2119. Sections marked *non-normative* are guidance only.
 
 - Exchange **latest-value state** between processes on one Linux host.
   Primary target: BeagleBone Black (TI AM335x, single-core Cortex-A8,
-  ARMv7-A, armhf, 512 MiB RAM) running **Debian 13 (trixie)**. That is the
-  only supported target OS; older releases are not supported, and boards
-  still on older images get reflashed.
+  ARMv7-A, armhf, 512 MiB RAM) running **Debian 13 (trixie)**. arm64
+  boxes on trixie are a second packaged target. Trixie is the only
+  supported target OS; older releases are not supported, and boards still
+  on older images get reflashed.
 - One implementation of everything concurrency-sensitive, in C
   (`libpsmsgr`). The Python and C# packages are thin bindings over it; they
   MUST NOT reimplement the shared-memory protocol.
